@@ -1,8 +1,8 @@
-// build.rs
-
-// Bring in a dependency on an externally maintained `gcc` package which manages
-// invoking the C compiler.
+extern crate bindgen;
 extern crate cc;
+
+use std::env;
+use std::path::PathBuf;
 
 fn main() {
     cc::Build::new()
@@ -23,4 +23,27 @@ fn main() {
         .include("aom_build/aom")
         .flag("-std=c99")
         .compile("libntr.a");
+
+    let bindings = bindgen::Builder::default()
+        .header("wrapper.h")
+        .clang_arg("-Iaom_build")
+        .clang_arg("-Iaom_build/aom")
+        .clang_arg("-Iaom_build/aom/av1/common")
+        .clang_arg("-Iaom_build/aom/av1/decoder")
+        .clang_arg("-Iaom_build/aom/av1/encoder")
+        // See #687
+        .hide_type("FP_NAN")
+        .hide_type("FP_INFINITE")
+        .hide_type("FP_ZERO")
+        .hide_type("FP_SUBNORMAL")
+        .hide_type("FP_NORMAL")
+        // See #577
+        .hide_type("max_align_t")
+        .generate()
+        .expect("Unable to generate bindings");
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings");
 }

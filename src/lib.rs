@@ -11,6 +11,7 @@ use bitstream_io::{BE, BitWriter};
 use byteorder::*;
 use clap::App;
 
+mod bindings;
 mod ec;
 mod partition;
 mod context;

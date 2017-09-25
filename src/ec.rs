@@ -1,44 +1,37 @@
 extern crate libc;
 
-use std::mem::transmute;
 use std::mem::uninitialized;
 use std::slice;
 
-pub struct Writer {
-    enc: [u8; 100]
-}
+use bindings::{od_ec_enc, od_ec_enc_done, od_ec_enc_init, od_ec_encode_bool_q15, od_ec_encode_cdf_q15};
 
-extern {
-    fn od_ec_enc_init(enc: *mut libc::c_void, size: u32);
-    fn od_ec_enc_done(enc: *mut libc::c_void, nbytes: *mut u32) -> *const u8;
-    fn od_ec_encode_cdf_q15(enc: *mut libc::c_void, s: libc::c_int, cdf: *const u16,
-                            nsyms: libc::c_int);
-    fn od_ec_encode_bool_q15(enc: *mut libc::c_void, val: libc::c_int, f: libc::c_uint);
+pub struct Writer {
+    enc: od_ec_enc
 }
 
 impl Writer {
     pub fn new() -> Writer {
         unsafe {
-            let enc = uninitialized();
-            od_ec_enc_init(transmute(&enc), 1024);
+            let mut enc: od_ec_enc = uninitialized();
+            od_ec_enc_init(&mut enc, 1024);
             Writer { enc: enc }
         }
     }
     pub fn done(&mut self) -> &[u8] {
         let mut nbytes: u32 = 0;
         unsafe {
-            let b = od_ec_enc_done(transmute(&self.enc), &mut nbytes);
+            let b = od_ec_enc_done(&mut self.enc, &mut nbytes);
             slice::from_raw_parts(b, nbytes as usize)
         }
     }
     pub fn cdf(&mut self, s: u32, cdf: &[u16], nsyms: u32) {
         unsafe {
-            od_ec_encode_cdf_q15(transmute(&self.enc), s as libc::c_int, cdf.as_ptr(), nsyms as libc::c_int);
+            od_ec_encode_cdf_q15(&mut self.enc, s as libc::c_int, cdf.as_ptr(), nsyms as libc::c_int);
         }
     }
     pub fn bool(&mut self, val: bool, f: u16) {
         unsafe {
-            od_ec_encode_bool_q15(transmute(&self.enc), val as libc::c_int, f as libc::c_uint);
+            od_ec_encode_bool_q15(&mut self.enc, val as libc::c_int, f as libc::c_uint);
         }
     }
     fn update_cdf(cdf: &mut [u16], val: u32, nsymbs: usize) {
