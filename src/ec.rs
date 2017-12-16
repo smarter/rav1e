@@ -272,6 +272,7 @@ impl Writer {
     }
     pub fn symbol(&mut self, s: u32, cdf: &mut [u16], nsymbs: usize) {
         self.cdf(s, &cdf[..nsymbs]);
+        // println!("{:?}", cdf);
         Writer::update_cdf(cdf, s, nsymbs);
     }
 
@@ -292,7 +293,7 @@ impl Writer {
         }
     }
 
-    pub fn rollback(&mut self, checkpoint: WriterCheckpoint) {
+    pub fn rollback(&mut self, checkpoint: &WriterCheckpoint) {
         self.enc.precarry.truncate(checkpoint.precarry_len);
         self.enc.low = checkpoint.low;
         self.enc.rng = checkpoint.rng;
@@ -300,6 +301,7 @@ impl Writer {
     }
 }
 
+#[derive(Clone)]
 pub struct WriterCheckpoint {
     precarry_len: usize,
     low: od_ec_window,

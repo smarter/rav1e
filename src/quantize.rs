@@ -1,8 +1,8 @@
 #![allow(safe_extern_statics)]
 
 extern {
-    static dc_qlookup: [i16; 256];
-    static ac_qlookup: [i16; 256];
+    pub static dc_qlookup: [i16; 256];
+    pub static ac_qlookup: [i16; 256];
 }
 
 pub fn quantize_in_place(qindex: usize, coeffs: &mut [i32]) {

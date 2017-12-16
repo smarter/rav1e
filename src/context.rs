@@ -202,6 +202,7 @@ extern {
 
 type CoeffModel = [[[[u16; ENTROPY_TOKENS + 1];COEFF_CONTEXTS];COEF_BANDS];REF_TYPES];
 
+#[derive(Clone)]
 pub struct CDFContext {
     partition_cdf: [[u16; PARTITION_TYPES + 1]; PARTITION_CONTEXTS],
     kf_y_cdf: [[[u16; INTRA_MODES + 1]; INTRA_MODES]; INTRA_MODES],
@@ -227,17 +228,9 @@ impl CDFContext {
             coef_tail_cdfs: default_coef_tail_cdf,
         }
     }
-    pub fn get_y_mode_cdf(&mut self,
-                      above_mi: Option<Mode>,
-                      left_mi: Option<Mode>) -> &mut [u16; INTRA_MODES + 1]{
-        let above = above_block_mode(above_mi);
-        let left = left_block_mode(left_mi);
-        return &mut self.kf_y_cdf[above as usize][left as usize];
-    }
 }
 
-#[derive(Default)]
-#[allow(dead_code)]
+#[derive(Clone, Default)]
 pub struct MIContext {
     mi_cols: usize,
     mi_rows: usize,
@@ -281,30 +274,43 @@ impl MIContext {
         return ((left * 2 + above) + bsl) as usize * PARTITION_PLOFFSET;
     }
     fn skip_context(&mut self) -> usize {
-        let above_skip = match self.get_above_mi() {
-            Some(mi) => mi.skip as usize,
-            None => 0
-        };
-        let left_skip = match self.get_left_mi() {
-            Some(mi) => mi.skip as usize,
-            None => 0
-        };
-        above_skip + left_skip
+        (self.get_above_mi().skip as usize) + (self.get_left_mi().skip as usize)
     }
     pub fn get_mi(&mut self) -> &mut Mode {
         &mut self.modes[self.miy][self.mix]
     }
-    // TODO: fix these when adding prediction mode support
-    pub fn get_above_mi(&mut self) -> Option<&mut Mode> {
-        None
+
+    pub fn get_above_mi(&mut self) -> Mode {
+        if self.miy > 0 {
+            self.modes[self.miy - 1][self.mix]
+        } else {
+            Mode {
+                pred: PredictionMode::DC_PRED,
+                skip: false
+            }
+        }
     }
-    pub fn get_left_mi(&mut self) -> Option<&mut Mode> {
-        None
+    pub fn get_left_mi(&mut self) -> Mode {
+        if self.mix > 0 {
+            self.modes[self.miy][self.mix - 1]
+        } else {
+            Mode {
+                pred: PredictionMode::DC_PRED,
+                skip: false
+            }
+        }
     }
     pub fn set_loc(&mut self, mix: usize, miy: usize) {
         self.mix = mix;
         self.miy = miy;
     }
+}
+
+#[derive(Clone)]
+pub struct ContextWriterCheckpoint {
+    pub w: ec::WriterCheckpoint,
+    pub fc: CDFContext,
+    pub mc: MIContext
 }
 
 pub struct ContextWriter {
@@ -318,15 +324,20 @@ impl ContextWriter {
         let ctx = self.mc.partition_plane_context(0, 0, BlockSize::BLOCK_64X64);
         self.w.symbol(p as u32, &mut self.fc.partition_cdf[ctx], PARTITION_TYPES);
     }
-    pub fn write_intra_mode(&mut self, p: PredictionMode) {
-        let cdf = self.fc.get_y_mode_cdf(None, None);;
-        self.w.symbol(intra_mode_ind[p as usize], cdf, INTRA_MODES);
+    pub fn write_intra_mode_kf(&mut self, pred: PredictionMode) {
+        let above_pred = self.mc.get_above_mi().pred as usize;
+        let left_pred = self.mc.get_left_mi().pred as usize;
+        // println!("above: {}, left: {}", above_pred, left_pred);
+        // println!("cur: {}", pred as usize);
+        let cdf = &mut self.fc.kf_y_cdf[above_pred][left_pred];
+        self.w.symbol(intra_mode_ind[pred as usize], cdf, INTRA_MODES);
     }
-    pub fn write_intra_uv_mode(&mut self, p: PredictionMode) {
-        let cdf = &mut self.fc.uv_mode_cdf[self.mc.get_mi().pred as usize];
-        self.w.symbol(intra_mode_ind[p as usize], cdf, INTRA_MODES);
+    pub fn write_intra_uv_mode(&mut self, uv_mode: PredictionMode, y_mode: PredictionMode) {
+        let cdf = &mut self.fc.uv_mode_cdf[y_mode as usize];
+        // println!("cdf: {:?}", cdf);
+        self.w.symbol(intra_mode_ind[uv_mode as usize], cdf, INTRA_MODES);
     }
-    pub fn write_tx_type(&mut self, tx_type: TxType) {
+    pub fn write_tx_type(&mut self, tx_type: TxType, y_mode: PredictionMode) {
         let tx_size = TxSize::TX_4X4;
         let square_tx_size = TXSIZE_SQR_MAP[tx_size as usize];
         let eset =
@@ -334,7 +345,7 @@ impl ContextWriter {
         if eset > 0 {
             self.w.symbol(
                 av1_ext_tx_intra_ind[eset as usize][tx_type as usize],
-                &mut self.fc.intra_ext_tx_cdf[eset as usize][square_tx_size as usize][self.mc.get_mi().pred as usize],
+                &mut self.fc.intra_ext_tx_cdf[eset as usize][square_tx_size as usize][y_mode as usize],
                 ext_tx_cnt_intra[eset as usize]);
         }
     }
@@ -349,7 +360,6 @@ impl ContextWriter {
         let band = 0;
         let ctx = self.mc.above_coeff_context[plane][self.mc.mix] + self.mc.left_coeff_context[plane][self.mc.miy % MAX_MIB_SIZE];
         let cdf = &mut self.fc.coef_head_cdfs[tx_size_ctx][plane_type][ref_type][band][ctx as usize];
-        //println!("encoding token band={} ctx={}", band, ctx);
         self.w.symbol(0, cdf, HEAD_TOKENS + 1);
         self.mc.above_coeff_context[plane][self.mc.mix] = 0;
         self.mc.left_coeff_context[plane][self.mc.miy % MAX_MIB_SIZE] = 0;
@@ -460,5 +470,19 @@ impl ContextWriter {
         }
         self.mc.above_coeff_context[plane][self.mc.mix] = 1;
         self.mc.left_coeff_context[plane][self.mc.miy % MAX_MIB_SIZE] = 1;
+    }
+
+    pub fn checkpoint(&mut self) -> ContextWriterCheckpoint {
+        ContextWriterCheckpoint {
+            w: self.w.checkpoint(),
+            fc: self.fc.clone(),
+            mc: self.mc.clone()
+        }
+    }
+
+    pub fn rollback(&mut self, checkpoint: ContextWriterCheckpoint) {
+        self.w.rollback(&checkpoint.w);
+        self.fc = checkpoint.fc.clone();
+        self.mc = checkpoint.mc.clone();
     }
 }

@@ -247,7 +247,7 @@ fn get_compressed_header() -> Vec<u8> {
     h
 }
 
-fn write_b(cw: &mut ContextWriter, fi: &FrameInvariants, fs: &mut FrameState, p: usize, sbx: usize, sby: usize, bx: usize, by: usize) {
+fn write_b(cw: &mut ContextWriter, fi: &FrameInvariants, fs: &mut FrameState, p: usize, sbx: usize, sby: usize, bx: usize, by: usize, mode: PredictionMode) {
     let stride = fs.input.planes[p].stride;
     let xdec = fs.input.planes[p].xdec;
     let ydec = fs.input.planes[p].ydec;
@@ -271,10 +271,20 @@ fn write_b(cw: &mut ContextWriter, fi: &FrameInvariants, fs: &mut FrameState, p:
             }
         }
     }
-    match (sbx, bx, sby, by) {
-        (_,_,0,0) => pred_dc_left_4x4(&mut fs.rec.planes[p].data[y*stride+x..], stride, &above, &left),
-        (0,0,_,_) => pred_dc_top_4x4(&mut fs.rec.planes[p].data[y*stride+x..], stride, &above, &left),
-        _ => pred_dc_4x4(&mut fs.rec.planes[p].data[y*stride+x..], stride, &above, &left),
+    match mode {
+        PredictionMode::DC_PRED =>
+            match (sbx, bx, sby, by) {
+                (_,_,0,0) =>
+                    pred_dc_left_4x4(&mut fs.rec.planes[p].data[y*stride+x..], stride, &above, &left),
+                (0,0,_,_) =>
+                    pred_dc_top_4x4(&mut fs.rec.planes[p].data[y*stride+x..], stride, &above, &left),
+                _ =>
+                    pred_dc_4x4(&mut fs.rec.planes[p].data[y*stride+x..], stride, &above, &left),
+            }
+        PredictionMode::H_PRED =>
+            pred_h_4x4(&mut fs.rec.planes[p].data[y*stride+x..], stride, &above, &left),
+        _ =>
+            panic!("Unimplemented prediction mode: {:?}", mode),
     }
     let mut coeffs = [0 as i32; 16];
     let mut residual = [0 as i16; 16];
@@ -285,7 +295,6 @@ fn write_b(cw: &mut ContextWriter, fi: &FrameInvariants, fs: &mut FrameState, p:
     }
     fdct4x4(&residual, &mut coeffs, 4);
     quantize_in_place(fi.qindex, &mut coeffs);
-    cw.mc.set_loc(sbx*16+bx, sby*16+by);
     cw.write_coeffs(p, &coeffs);
     //reconstruct
     let mut rcoeffs = [0 as i32; 16];
@@ -293,26 +302,44 @@ fn write_b(cw: &mut ContextWriter, fi: &FrameInvariants, fs: &mut FrameState, p:
     idct4x4_add(&mut rcoeffs, &mut fs.rec.planes[p].data[y*stride+x..], stride);
 }
 
-fn write_sb(cw: &mut ContextWriter, fi: &FrameInvariants, fs: &mut FrameState, sbx: usize, sby: usize) {
+fn write_sb(cw: &mut ContextWriter, fi: &FrameInvariants, fs: &mut FrameState, sbx: usize, sby: usize, mode: PredictionMode) {
+    cw.mc.set_loc(sbx*16, sby*16);
+
     cw.write_partition(PartitionType::PARTITION_NONE);
     cw.write_skip(false);
-    cw.write_intra_mode(PredictionMode::DC_PRED);
-    cw.write_intra_uv_mode(PredictionMode::DC_PRED);
-    cw.write_tx_type(TxType::DCT_DCT);
+    cw.write_intra_mode_kf(mode);
+    let uv_mode = PredictionMode::DC_PRED; //mode;
+    cw.write_intra_uv_mode(uv_mode, mode);
+    cw.write_tx_type(TxType::DCT_DCT, mode);
     for p in 0..1 {
         for by in 0..16 {
             for bx in 0..16 {
-                write_b(cw, fi, fs, p, sbx, sby, bx, by);
+                cw.mc.set_loc(sbx*16+bx, sby*16+by);
+                cw.mc.get_mi().pred = mode;
+                write_b(cw, fi, fs, p, sbx, sby, bx, by, mode);
             }
         }
     }
     for p in 1..3 {
         for by in 0..8 {
             for bx in 0..8 {
-                write_b(cw, fi, fs, p, sbx, sby, bx, by);
+                cw.mc.set_loc(sbx*16+bx, sby*16+by);
+                write_b(cw, fi, fs, p, sbx, sby, bx, by, uv_mode);
             }
         }
     }
+}
+
+fn dist_block(a: &Vec<u16>, b: &Vec<u16>, x: usize, y: usize, stride: usize) -> u64 {
+    let mut sse: u64 = 0;
+    for j in 0..64 {
+        for i in 0..64 {
+            let pos = (y+j)*stride + x+i;
+            let dist = (a[pos] as i16 - b[pos] as i16) as i64;
+            sse += (dist * dist) as u64;
+        }
+    }
+    sse
 }
 
 fn encode_tile(fi: &FrameInvariants, fs: &mut FrameState) -> Vec<u8> {
@@ -324,10 +351,42 @@ fn encode_tile(fi: &FrameInvariants, fs: &mut FrameState) -> Vec<u8> {
         fc: fc,
         mc: mc,
     };
+
+    let stride = fs.input.planes[0].stride;
+    let xdec = fs.input.planes[0].xdec;
+    let ydec = fs.input.planes[0].ydec;
+
+    let q = unsafe { dc_qlookup[fi.qindex] } as f64;
+    // I don't know a simpler way to do "log2" ...
+    let f = 2 as f64;
+    let lambda = 0.8*q*q*f.log(2.0)/6.0;
+
     for sby in 0..fi.sb_height {
         cw.reset_left_coeff_context(0);
         for sbx in 0..fi.sb_width {
-            write_sb(&mut cw, fi, fs, sbx, sby);
+            let tell = cw.w.tell_frac();
+            let checkpoint = cw.checkpoint();
+
+            // let pred = PredictionMode::DC_PRED;
+            // write_sb(&mut cw, fi, fs, sbx, sby, pred);
+
+            let pred = if sbx == 0 { PredictionMode::DC_PRED } else { PredictionMode::H_PRED };
+            write_sb(&mut cw, fi, fs, sbx, sby, pred);
+            let x = sbx*64 >> xdec;
+            let y = sby*64 >> ydec;
+            let d1 = dist_block(&fs.input.planes[0].data, &fs.rec.planes[0].data, x, y, stride);
+            let r1 = ((cw.w.tell_frac() - tell) as f64)/8.0;
+
+            cw.rollback(checkpoint.clone());
+            write_sb(&mut cw, fi, fs, sbx, sby, PredictionMode::H_PRED);
+
+            let d2 = dist_block(&fs.input.planes[0].data, &fs.rec.planes[0].data, x, y, stride);
+            let r2 = ((cw.w.tell_frac() - tell) as f64)/8.0;
+
+            if (d1 as f64) + lambda*r1 < (d2 as f64) + lambda*r2 {
+                cw.rollback(checkpoint);
+                write_sb(&mut cw, fi, fs, sbx, sby, PredictionMode::DC_PRED);
+            }
         }
     }
     let mut h = cw.w.done();
