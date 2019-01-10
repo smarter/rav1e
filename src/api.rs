@@ -11,6 +11,7 @@ use bitstream_io::*;
 use encoder::*;
 use metrics::calculate_frame_psnr;
 use partition::*;
+use rate::RCState;
 use scenechange::SceneChangeDetector;
 use self::EncoderStatus::*;
 
@@ -352,6 +353,7 @@ impl Config {
       segment_start_frame: 0,
       keyframe_detector: SceneChangeDetector::new(self.enc.bit_depth),
       config: *self,
+      rc_state: RCState::new()
     }
   }
 }
@@ -375,6 +377,7 @@ pub struct Context {
   segment_start_frame: u64,
   keyframe_detector: SceneChangeDetector,
   pub config: Config,
+  rc_state: RCState
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -620,6 +623,9 @@ impl Context {
           self.idx += 1;
 
           if let Some(frame) = f {
+            let fti = fi.get_frame_subtype();
+            let qps = self.rc_state.select_qi(fi, fti);
+            fi.set_quantizers(&qps);
             let mut fs = FrameState::new_with_frame(fi, frame.clone());
 
             let data = encode_frame(fi, &mut fs);
