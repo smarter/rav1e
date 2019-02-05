@@ -676,13 +676,13 @@ pub fn rdo_mode_decision(fi: &FrameInvariants, fs: &mut FrameState,
       .iter()
       .take(num_modes_rdo / 2)
       .for_each(|&(luma_mode, _prob)| modes.push(luma_mode));
-    sads.iter().take(num_modes_rdo).for_each(|&(luma_mode, _sad)| {
+    sads.iter()/*.take(num_modes_rdo)*/.for_each(|&(luma_mode, _sad)| {
       if !modes.contains(&luma_mode) {
         modes.push(luma_mode)
       }
     });
 
-    modes.iter().take(num_modes_rdo).for_each(|&luma_mode| {
+    modes.iter()/*.take(num_modes_rdo)*/.for_each(|&luma_mode| {
       let mvs = [MotionVector { row: 0, col: 0 }; 2];
       let ref_frames = [INTRA_FRAME, NONE_FRAME];
       let mut mode_set_chroma = vec![luma_mode];
