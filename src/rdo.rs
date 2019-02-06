@@ -135,7 +135,7 @@ pub fn sse_wxh(
     sse += row_sse as u64;
   }
   if is_luma {
-    ((sse as f64) * 0.8_f64 + 0.5_f64) as u64
+    ((sse as f64) * 0.9_f64 + 0.5_f64) as u64
   }
   else {
     sse
