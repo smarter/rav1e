@@ -113,7 +113,7 @@ fn cdef_dist_wxh(
 
 // Sum of Squared Error for a wxh block
 pub fn sse_wxh(
-  src1: &PlaneSlice<'_>, src2: &PlaneSlice<'_>, w: usize, h: usize
+  src1: &PlaneSlice<'_>, src2: &PlaneSlice<'_>, w: usize, h: usize, is_luma: bool
 ) -> u64 {
   assert!(w & (MI_SIZE - 1) == 0);
   assert!(h & (MI_SIZE - 1) == 0);
@@ -134,7 +134,12 @@ pub fn sse_wxh(
       }).sum::<u32>();
     sse += row_sse as u64;
   }
-  sse
+  if is_luma {
+    ((sse as f64) * 0.8_f64 + 0.5_f64) as u64
+  }
+  else {
+    sse
+  }
 }
 
 pub fn get_lambda(fi: &FrameInvariants) -> f64 {
@@ -174,7 +179,8 @@ fn compute_rd_cost(
       &fs.input.planes[0].slice(&po),
       &fs.rec.planes[0].slice(&po),
       w_y,
-      h_y
+      h_y,
+      true
     )
   } else if fi.config.tune == Tune::Psychovisual {
     if w_y < 8 || h_y < 8 {
@@ -182,7 +188,8 @@ fn compute_rd_cost(
         &fs.input.planes[0].slice(&po),
         &fs.rec.planes[0].slice(&po),
         w_y,
-        h_y
+        h_y,
+        true
       )
     } else {
       cdef_dist_wxh(
@@ -218,7 +225,8 @@ fn compute_rd_cost(
           &fs.input.planes[p].slice(&po),
           &fs.rec.planes[p].slice(&po),
           w_uv,
-          h_uv
+          h_uv,
+          false
         );
       }
     };
@@ -247,7 +255,8 @@ fn compute_tx_rd_cost(
       &fs.input.planes[0].slice(&po),
       &fs.rec.planes[0].slice(&po),
       w_y,
-      h_y
+      h_y,
+      true
     )
   } else {
     assert!(tx_dist >= 0);
@@ -275,7 +284,8 @@ fn compute_tx_rd_cost(
           &fs.input.planes[p].slice(&po),
           &fs.rec.planes[p].slice(&po),
           w_uv,
-          h_uv
+          h_uv,
+          false
         );
       }
     }
@@ -821,7 +831,8 @@ pub fn rdo_cfl_alpha(
             &input.slice(&po),
             &rec.slice(&po),
             uv_tx_size.width(),
-            uv_tx_size.height()
+            uv_tx_size.height(),
+            false
           )
         }).unwrap()
     }).collect();
@@ -1142,7 +1153,7 @@ pub fn rdo_cdef_decision(sbo: &SuperBlockOffset, fi: &FrameInvariants,
               if p==0 {
                 err += cdef_dist_wxh_8x8(&in_slice, &out_slice, fi.sequence.bit_depth);
               } else {
-                err += sse_wxh(&in_slice, &out_slice, 8>>xdec, 8>>ydec);
+                err += sse_wxh(&in_slice, &out_slice, 8>>xdec, 8>>ydec, false);
               }
             }
           }
