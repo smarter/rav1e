@@ -623,9 +623,9 @@ impl Context {
           self.idx += 1;
 
           if let Some(frame) = f {
-            let fti = self.fi.get_frame_subtype();
-            let qps = self.rc_state.select_qi(self, fti);
-            self.fi.set_quantizers(&qps);
+            let fti = fi.get_frame_subtype();
+            let qps = self.rc_state.select_qi(fi, fti);
+            fi.set_quantizers(&qps);
             let mut fs = FrameState::new_with_frame(fi, frame.clone());
 
             let data = encode_frame(fi, &mut fs);

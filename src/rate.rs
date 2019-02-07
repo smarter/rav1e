@@ -1,4 +1,4 @@
-use api::Context;
+use encoder::FrameInvariants;
 use quantize::dc_q;
 use quantize::ac_q;
 use quantize::select_ac_qi;
@@ -252,14 +252,14 @@ impl RCState {
   }
 
   // TODO: Separate quantizers for Cb and Cr.
-  pub fn select_qi(&self, ctx: &Context, fti: usize) -> QuantizerParameters {
+  pub fn select_qi(&self, fi: &FrameInvariants, fti: usize) -> QuantizerParameters {
     // Rate control is not active.
     // Derive quantizer directly from frame type.
     // TODO: Rename "quantizer" something that indicates it is a quantizer
     //  index, and move it somewhere more sensible (or choose a better way to
     //  parameterize a "quality" configuration parameter).
-    let base_qi = ctx.fi.config.quantizer;
-    let bit_depth = ctx.fi.sequence.bit_depth as i32;
+    let base_qi = fi.config.quantizer;
+    let bit_depth = fi.sequence.bit_depth as i32;
     // Adjust base_qi for the frame type.
     // TODO: Adjust the quantizer (not the index) instead to avoid issues with
     //  the non-linearity of the AV1 quantizer tables.
