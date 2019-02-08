@@ -1004,6 +1004,7 @@ pub fn rdo_partition_decision(
         let spmvs = &pmvs[pmv_idx];
 
         let mode_decision = rdo_mode_decision(fi, fs, cw, bsize, bo, spmvs, false);
+        cost += mode_decision.rd_cost;
         child_modes.push(mode_decision);
       }
       PARTITION_SPLIT |
@@ -1041,25 +1042,26 @@ pub fn rdo_partition_decision(
           let w: &mut dyn Writer = if cw.bc.cdef_coded {w_post_cdef} else {w_pre_cdef};
           let tell = w.tell_frac();
           cw.write_partition(w, bo, partition, bsize);
-          cost = (w.tell_frac() - tell) as f64 * get_lambda(fi)/ ((1 << OD_BITRES) as f64);
+          cost += (w.tell_frac() - tell) as f64 * get_lambda(fi)/ ((1 << OD_BITRES) as f64);
         }
-        let mut rd_cost_sum = 0.0;
 
         for (offset, pmv_idx) in partitions.iter().zip(pmv_idxs) {
           let mode_decision =
             rdo_mode_decision(fi, fs, cw, subsize, &offset,
                               &pmvs[pmv_idx], true);
 
-          rd_cost_sum += mode_decision.rd_cost;
+          cost += mode_decision.rd_cost;
 
-          if fi.enable_early_exit && rd_cost_sum > best_rd {
+          if fi.enable_early_exit && cost > best_rd {
             early_exit = true;
             break;
           }
 
           if subsize >= BlockSize::BLOCK_8X8 && subsize.is_sqr() {
             let w: &mut dyn Writer = if cw.bc.cdef_coded {w_post_cdef} else {w_pre_cdef};
+            let tell = w.tell_frac();
             cw.write_partition(w, offset, PartitionType::PARTITION_NONE, subsize);
+            cost += (w.tell_frac() - tell) as f64 * get_lambda(fi)/ ((1 << OD_BITRES) as f64);
           }
           encode_block_with_modes(fi, fs, cw, w_pre_cdef, w_post_cdef, subsize,
                                   offset, &mode_decision);
@@ -1072,10 +1074,8 @@ pub fn rdo_partition_decision(
     }
 
     if !early_exit {
-      let rd = cost + child_modes.iter().map(|m| m.rd_cost).sum::<f64>();
-
-      if rd < best_rd {
-        best_rd = rd;
+      if cost < best_rd {
+        best_rd = cost;
         best_partition = partition;
         best_pred_modes = child_modes.clone();
       }
