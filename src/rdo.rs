@@ -134,7 +134,7 @@ pub fn sse_wxh(
       }).sum::<u32>();
     sse += row_sse as u64;
   }
-  sse
+  (sse * 0.8_f64 + 0.5_f64) as u64
 }
 
 pub fn get_lambda(fi: &FrameInvariants) -> f64 {
