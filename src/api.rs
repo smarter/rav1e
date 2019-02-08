@@ -164,7 +164,7 @@ impl SpeedSettings {
   }
 
   fn encode_bottomup_preset(speed: usize) -> bool {
-    speed == 0
+    true//speed == 0
   }
 
   fn rdo_tx_decision_preset(speed: usize) -> bool {
