@@ -2728,25 +2728,25 @@ fn encode_partition_topdown(fi: &FrameInvariants, fs: &mut FrameState,
     PARTITION_SPLIT |
     PARTITION_HORZ |
     PARTITION_VERT => {
-      let num_modes = if partition == PARTITION_SPLIT { 1 }
-      else { 1 };
+      // let num_modes = if partition == PARTITION_SPLIT { 1 }
+      // else { 1 };
 
-      if rdo_output.part_modes.len() >= num_modes {
-        // The optimal prediction modes for each split block is known from an rdo_partition_decision() call
-        assert!(subsize != BlockSize::BLOCK_INVALID);
+      // if rdo_output.part_modes.len() >= num_modes {
+      //   // The optimal prediction modes for each split block is known from an rdo_partition_decision() call
+      //   assert!(subsize != BlockSize::BLOCK_INVALID);
 
-        for mode in rdo_output.part_modes {
-          let offset = mode.bo.clone();
+      //   for mode in rdo_output.part_modes {
+      //     let offset = mode.bo.clone();
 
-          // Each block is subjected to a new splitting decision
-          encode_partition_topdown(fi, fs, cw, w_pre_cdef, w_post_cdef, subsize, &offset,
-                                   &Some(RDOOutput {
-                                     rd_cost: mode.rd_cost,
-                                     part_type: PartitionType::PARTITION_NONE,
-                                     part_modes: vec![mode] }), pmvs);
-        }
-      }
-      else {
+      //     // Each block is subjected to a new splitting decision
+      //     encode_partition_topdown(fi, fs, cw, w_pre_cdef, w_post_cdef, subsize, &offset,
+      //                              &Some(RDOOutput {
+      //                                rd_cost: mode.rd_cost,
+      //                                part_type: PartitionType::PARTITION_NONE,
+      //                                part_modes: vec![mode] }), pmvs);
+      //   }
+      // }
+      // else {
         let hbsw = subsize.width_mi(); // Half the block size width in blocks
         let hbsh = subsize.height_mi(); // Half the block size height in blocks
         let four_partitions = [
@@ -2770,7 +2770,7 @@ fn encode_partition_topdown(fi: &FrameInvariants, fs: &mut FrameState,
             pmvs
           );
         });
-      }
+      // }
     },
     _ => { assert!(false); },
   }
