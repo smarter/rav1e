@@ -133,17 +133,17 @@ impl SpeedSettings {
   }
 
   fn min_block_size_preset(speed: usize) -> BlockSize {
-    if speed <= 1 {
+    // if speed <= 1 {
       BlockSize::BLOCK_4X4
-    } else if speed <= 2 {
-      BlockSize::BLOCK_8X8
-    } else if speed <= 3 {
-      BlockSize::BLOCK_16X16
-    } else if speed <= 4 {
-      BlockSize::BLOCK_32X32
-    } else {
-      BlockSize::BLOCK_64X64
-    }
+    // } else if speed <= 2 {
+    //   BlockSize::BLOCK_8X8
+    // } else if speed <= 3 {
+    //   BlockSize::BLOCK_16X16
+    // } else if speed <= 4 {
+    //   BlockSize::BLOCK_32X32
+    // } else {
+    //   BlockSize::BLOCK_64X64
+    // }
   }
 
   fn multiref_preset(speed: usize) -> bool {
