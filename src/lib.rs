@@ -9,6 +9,8 @@
 
 #![allow(safe_extern_statics)]
 #![deny(bare_trait_objects)]
+#![feature(extern_types)]
+#![feature(const_transmute)]
 
 // Override assert! and assert_eq! in tests
 #[cfg(test)]

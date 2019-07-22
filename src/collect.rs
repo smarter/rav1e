@@ -5,7 +5,6 @@
          non_upper_case_globals,
          unused_assignments,
          unused_mut)]
-#![feature(const_transmute, extern_types)]
 extern crate libc;
 extern crate c2rust_bitfields;
 use c2rust_bitfields::BitfieldStruct;
@@ -564,7 +563,7 @@ pub struct oc_qii_state {
     #[bitfield(name = "qi12_count", ty = "libc::c_uint", bits = "16..=29")]
     #[bitfield(name = "qi12", ty = "libc::c_int", bits = "30..=31")]
     pub qi01_count_qi01_qi12_count_qi12: [u8; 4],
-    #[bitfield(padding)]
+    //#[bitfield(padding)]
     pub _pad: [u8; 4],
 }
 /*State to track coded block flags and their bit cost.
