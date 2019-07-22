@@ -18,6 +18,7 @@ extern crate pretty_assertions;
 #[cfg(cargo_c)]
 mod capi;
 
+mod collect;
 mod dist;
 mod ec;
 mod partition;
