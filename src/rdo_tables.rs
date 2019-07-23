@@ -1,4 +1,6 @@
 pub const RDO_NUM_BINS: usize =  50;
+pub const OC_COMP_BINS: usize = 24;
+pub const OC_SATD_SHIFT: usize = 9;
 #[allow(unused)]
 pub const RDO_MAX_BIN: usize = 10000;
 pub const RATE_EST_MAX_BIN: usize = 100_000;

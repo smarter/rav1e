@@ -36,12 +36,14 @@ use crate::tiling::*;
 use crate::transform::{RAV1E_TX_TYPES, TxSet, TxSize, TxType};
 use crate::util::{AlignedArray, CastFromPrimitive, Pixel, UninitializedAlignedArray};
 use crate::rdo_tables::*;
+use crate::collect::*;
 
 use std;
 use std::cmp;
 use std::vec::Vec;
 use crate::partition::PartitionType::*;
 use arrayvec::*;
+use std::convert::TryInto;
 use serde_derive::{Serialize, Deserialize};
 
 #[derive(Copy,Clone,PartialEq)]
@@ -100,14 +102,12 @@ pub struct RDOPartitionOutput {
 pub struct RDOTracker {
   rate_bins: Vec<Vec<Vec<u64>>>,
   rate_counts: Vec<Vec<Vec<u64>>>,
+  mode_metrics_satd: [[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; RDO_QUANT_BINS-1]
 }
 
 impl RDOTracker {
   pub fn new() -> RDOTracker {
-    RDOTracker {
-      rate_bins: vec![vec![vec![0; RDO_NUM_BINS]; TxSize::TX_SIZES_ALL]; RDO_QUANT_BINS],
-      rate_counts: vec![vec![vec![0; RDO_NUM_BINS]; TxSize::TX_SIZES_ALL]; RDO_QUANT_BINS],
-    }
+    Default::default()
   }
   fn merge_array(new: &mut Vec<u64>, old: &[u64]) {
     for (n, o) in new.iter_mut().zip(old.iter()) {
@@ -128,6 +128,31 @@ impl RDOTracker {
     RDOTracker::merge_3d_array(&mut self.rate_bins, &input.rate_bins);
     RDOTracker::merge_3d_array(&mut self.rate_counts, &input.rate_counts);
   }
+  pub fn add_rate_2(&mut self, qindex: u8, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
+    let satd_bin = (satd >> OC_SATD_SHIFT).min(OC_COMP_BINS as u64 - 1);
+    let frag_bits = rate; // >> 3 ?
+    if fast_distortion != 0 {
+      let sqrt_ssd = (fast_distortion as f64).sqrt();
+      /*Weight the fragments by the inverse frame size; this prevents HD content
+      from dominating the statistics.*/
+      let fragw = 1.0/((frame_w*frame_h) as f64);
+      let qindex_bin = (qindex as usize)/RDO_QUANT_DIV;
+
+      unsafe {
+        oc_mode_metrics_add(
+          self.mode_metrics_satd[qindex_bin][pli][is_inter_block as usize]
+            .as_mut_ptr()
+            .offset(satd_bin as isize),
+          fragw,
+          satd as libc::c_int,
+          qindex as libc::c_int,
+          frag_bits.try_into().unwrap(),
+          sqrt_ssd
+        )
+      }
+    }
+  }
+
   pub fn add_rate(&mut self, qindex: u8, ts: TxSize, fast_distortion: u64, rate: u64) {
     if fast_distortion != 0 {
       let bs_index = ts as usize;

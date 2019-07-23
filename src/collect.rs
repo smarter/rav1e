@@ -7,6 +7,9 @@
          unused_mut)]
 extern crate c2rust_bitfields;
 extern crate libc;
+
+use serde_derive::{Serialize, Deserialize};
+
 use c2rust_bitfields::BitfieldStruct;
 extern {
   pub type _IO_wide_data;
@@ -847,7 +850,7 @@ The others correspond to central moments (or co-moments) of the given order,
 Because we need some moments up to fourth order, we use central moments to
  minimize the dynamic range and prevent rounding error from dominating the
  calculations.*/
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default, Deserialize, Serialize)]
 #[repr(C)]
 pub struct oc_mode_metrics {
   pub w: libc::c_double,
