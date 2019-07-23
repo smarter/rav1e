@@ -234,7 +234,7 @@ mod nasm {
   }
 }
 
-mod native {
+pub mod native {
   use crate::tiling::*;
   use crate::util::*;
 
