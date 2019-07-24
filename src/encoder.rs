@@ -1023,7 +1023,9 @@ pub fn encode_tx_block<T: Pixel>(
     tx_dist = (tx_dist + tx_dist_scale_rounding_offset) >> tx_dist_scale_bits;
   }
   if fi.config.train_rdo {
-    assert!(tx_size.width() == 8 && tx_size.height() == 8);
+    if tx_size.width() != 8 || tx_size.height() != 8 {
+      println!("skip block");
+    }
     let satd = get_satd(
       &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
       tx_size.width(), tx_size.height(), 8);
@@ -1808,7 +1810,7 @@ fn encode_partition_topdown<T: Pixel, W: Writer>(
   // Always split if the current partition is too large
   let must_split = (tile_bo.x + bsw as usize > ts.mi_width ||
                     tile_bo.y + bsh as usize > ts.mi_height ||
-                    bsize.greater_than(BlockSize::BLOCK_64X64)) && is_square;
+                    bsize.greater_than(BlockSize::BLOCK_8X8)) && is_square;
 
   let mut rdo_output = block_output.clone().unwrap_or(RDOOutput {
     part_type: PartitionType::PARTITION_INVALID,

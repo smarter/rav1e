@@ -206,7 +206,7 @@ impl SpeedSettings {
   ///  - speed - 0, slowest,  Min block size 4x4, TX domain distortion, complex pred modes, RDO TX decision, include near MVs, bottom-up encoding.
   pub fn from_preset(speed: usize) -> Self {
     SpeedSettings {
-      min_block_size: Self::min_block_size_preset(speed),
+      min_block_size: BlockSize::BLOCK_8X8,//Self::min_block_size_preset(speed),
       multiref: Self::multiref_preset(speed),
       fast_deblock: Self::fast_deblock_preset(speed),
       reduced_tx_set: Self::reduced_tx_set_preset(speed),
