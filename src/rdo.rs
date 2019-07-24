@@ -101,9 +101,10 @@ pub struct RDOPartitionOutput {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RDOTracker {
-  rate_bins: Vec<Vec<Vec<u64>>>,
-  rate_counts: Vec<Vec<Vec<u64>>>,
-  mode_metrics_satd: [[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; RDO_QUANT_BINS-1]
+  // rate_bins: Vec<Vec<Vec<u64>>>,
+  // rate_counts: Vec<Vec<Vec<u64>>>,
+  mode_metrics_satd: [[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS-1],
+  rd_weight_satd: [[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]
 }
 
 impl RDOTracker {
@@ -126,10 +127,10 @@ impl RDOTracker {
     }
   }
   pub fn merge_in(&mut self, input: &RDOTracker) {
-    RDOTracker::merge_3d_array(&mut self.rate_bins, &input.rate_bins);
-    RDOTracker::merge_3d_array(&mut self.rate_counts, &input.rate_counts);
+    // RDOTracker::merge_3d_array(&mut self.rate_bins, &input.rate_bins);
+    // RDOTracker::merge_3d_array(&mut self.rate_counts, &input.rate_counts);
   }
-  pub fn add_rate_2(&mut self, qps: QuantizerParameters, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
+  pub fn add_rate(&mut self, qps: QuantizerParameters, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
     let satd_bin = (satd >> (OC_SATD_SHIFT - (OD_BITRES as usize))).min(OC_COMP_BINS as u64 - 1);
     let frag_bits = rate >> OD_BITRES;
     if fast_distortion != 0 {
@@ -140,10 +141,11 @@ impl RDOTracker {
 
       // XX: using index wrong, needs to be actual lgo
 
-      // This is in Q57, should be Q10 ?
-      let q = qps.log_target_q;
-
-      let q_bin = (q as usize)/RDO_QUANT_DIV;
+      let q = qps.log_target_q >> 47; // Q57 to Q10
+      let mut q_bin = 0;
+      while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin] as i64) > q {
+        q_bin += 1;
+      }
 
       unsafe {
         oc_mode_metrics_add(
@@ -160,52 +162,12 @@ impl RDOTracker {
     }
   }
 
-  pub fn add_rate(&mut self, qindex: u8, ts: TxSize, fast_distortion: u64, rate: u64) {
-    if fast_distortion != 0 {
-      let bs_index = ts as usize;
-      let q_bin_idx = (qindex as usize)/RDO_QUANT_DIV;
-      let bin_idx_tmp = ((fast_distortion as i64 - (RATE_EST_BIN_SIZE as i64) / 2) as u64 / RATE_EST_BIN_SIZE) as usize;
-      let bin_idx = if bin_idx_tmp >= RDO_NUM_BINS {
-        RDO_NUM_BINS - 1
-      } else {
-        bin_idx_tmp
-      };
-      self.rate_counts[q_bin_idx][bs_index][bin_idx] += 1;
-      self.rate_bins[q_bin_idx][bs_index][bin_idx] += rate;
-    }
-  }
   pub fn print_code(&self) {
-    println!("pub static RDO_RATE_TABLE: [[[u64; RDO_NUM_BINS]; TxSize::TX_SIZES_ALL]; RDO_QUANT_BINS] = [");
-    for q_bin in 0..RDO_QUANT_BINS {
-      print!("[");
-      for bs_index in 0..TxSize::TX_SIZES_ALL {
-        print!("[");
-        for (rate_total, rate_count) in self.rate_bins[q_bin][bs_index].iter().zip(self.rate_counts[q_bin][bs_index].iter()) {
-          if *rate_count > 100 {
-            print!("{},", rate_total / rate_count);
-          } else {
-            print!("99999,");
-          }
-        }
-        println!("],");
-      }
-      println!("],");
-    }
-    println!("];");
   }
 }
 
 pub fn estimate_rate(qindex: u8, ts: TxSize, fast_distortion: u64) -> u64 {
-  let bs_index = ts as usize;
-  let q_bin_idx = (qindex as usize)/RDO_QUANT_DIV;
-  let bin_idx_down = ((fast_distortion) / RATE_EST_BIN_SIZE).min((RDO_NUM_BINS - 2) as u64);
-  let bin_idx_up = (bin_idx_down + 1).min((RDO_NUM_BINS - 1) as u64);
-  let x0 = (bin_idx_down * RATE_EST_BIN_SIZE) as i64;
-  let x1 = (bin_idx_up * RATE_EST_BIN_SIZE) as i64;
-  let y0 = RDO_RATE_TABLE[q_bin_idx][bs_index][bin_idx_down as usize] as i64;
-  let y1 = RDO_RATE_TABLE[q_bin_idx][bs_index][bin_idx_up as usize] as i64;
-  let slope = ((y1 - y0) << 8) / (x1 - x0);
-  (y0 + (((fast_distortion as i64 - x0) * slope) >> 8)).max(0) as u64
+  0
 }
 
 #[allow(unused)]

@@ -901,7 +901,7 @@ pub type oc_token_skip_func =
 ********************************************************************/
 
 #[no_mangle]
-pub static mut OC_MODE_LOGQ: [i16; 8/*RDO_QUANT_BINS*/] =
+pub static OC_MODE_LOGQ: [i16; 8/*OC_LOGQ_BINS*/] =
   [ 0x2B58, 0x2A75, 0x296A, 0x2822, 0x267D, 0x242D, 0x2044, 0x0C00 ];
   // [ 0x27E7, 0x246A, 0x2103, 0x1DD7, 0x1ACD, 0x1899, 0x1524, 0x0800 ];
 
