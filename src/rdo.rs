@@ -37,6 +37,7 @@ use crate::transform::{RAV1E_TX_TYPES, TxSet, TxSize, TxType};
 use crate::util::{AlignedArray, CastFromPrimitive, Pixel, UninitializedAlignedArray};
 use crate::rdo_tables::*;
 use crate::collect::*;
+use crate::rate::QuantizerParameters;
 
 use std;
 use std::cmp;
@@ -128,7 +129,7 @@ impl RDOTracker {
     RDOTracker::merge_3d_array(&mut self.rate_bins, &input.rate_bins);
     RDOTracker::merge_3d_array(&mut self.rate_counts, &input.rate_counts);
   }
-  pub fn add_rate_2(&mut self, qindex: u8, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
+  pub fn add_rate_2(&mut self, qps: QuantizerParameters, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
     let satd_bin = (satd >> (OC_SATD_SHIFT - (OD_BITRES as usize))).min(OC_COMP_BINS as u64 - 1);
     let frag_bits = rate >> OD_BITRES;
     if fast_distortion != 0 {
@@ -136,16 +137,22 @@ impl RDOTracker {
       /*Weight the fragments by the inverse frame size; this prevents HD content
       from dominating the statistics.*/
       let fragw = 1.0/((frame_w*frame_h) as f64);
-      let qindex_bin = (qindex as usize)/RDO_QUANT_DIV;
+
+      // XX: using index wrong, needs to be actual lgo
+
+      // This is in Q57, should be Q10 ?
+      let q = qps.log_target_q;
+
+      let q_bin = (q as usize)/RDO_QUANT_DIV;
 
       unsafe {
         oc_mode_metrics_add(
-          self.mode_metrics_satd[qindex_bin][pli][is_inter_block as usize]
+          self.mode_metrics_satd[q_bin][pli][is_inter_block as usize]
             .as_mut_ptr()
             .offset(satd_bin as isize),
           fragw,
           satd as libc::c_int,
-          qindex as libc::c_int,
+          q as libc::c_int,
           frag_bits.try_into().unwrap(),
           sqrt_ssd
         )

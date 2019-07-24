@@ -1185,7 +1185,7 @@ impl<T: Pixel> ContextInner<T> {
             self.maybe_prev_log_base_q
           );
           let fi = self.frame_invariants.get_mut(&cur_output_frameno).unwrap();
-          fi.set_quantizers(&qps);
+          fi.set_quantizers(qps);
 
           if self.rc_state.needs_trial_encode(fti) {
             let mut fs = FrameState::new_with_frame(fi, frame.clone());
@@ -1206,7 +1206,7 @@ impl<T: Pixel> ContextInner<T> {
             );
             let fi =
               self.frame_invariants.get_mut(&cur_output_frameno).unwrap();
-            fi.set_quantizers(&qps);
+            fi.set_quantizers(qps);
           }
 
           let fi = self.frame_invariants.get_mut(&cur_output_frameno).unwrap();

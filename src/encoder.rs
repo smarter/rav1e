@@ -468,6 +468,10 @@ pub struct FrameInvariants<T: Pixel> {
   pub ref_frames: [u8; INTER_REFS_PER_FRAME],
   pub ref_frame_sign_bias: [bool; INTER_REFS_PER_FRAME],
   pub rec_buffer: ReferenceFramesSet<T>,
+  // FIXME: Note that qps.lambda is not scaled by the bitdepth, unlike
+  // lambda below, it'd be less confusing if qps.lambda was scaled and we
+  // could drop the other one.
+  qps: QuantizerParameters,
   pub base_q_idx: u8,
   pub dc_delta_q: [i8; 3],
   pub ac_delta_q: [i8; 3],
@@ -610,6 +614,7 @@ impl<T: Pixel> FrameInvariants<T> {
       ref_frames: [0; INTER_REFS_PER_FRAME],
       ref_frame_sign_bias: [false; INTER_REFS_PER_FRAME],
       rec_buffer: ReferenceFramesSet::new(),
+      qps: Default::default(),
       base_q_idx: config.quantizer as u8,
       dc_delta_q: [0; 3],
       ac_delta_q: [0; 3],
@@ -776,7 +781,8 @@ impl<T: Pixel> FrameInvariants<T> {
     }
   }
 
-  pub fn set_quantizers(&mut self, qps: &QuantizerParameters) {
+  pub fn set_quantizers(&mut self, qps: QuantizerParameters) {
+    self.qps = qps;
     self.base_q_idx = qps.ac_qi[0];
     let base_q_idx = self.base_q_idx as i32;
     for pi in 0..3 {
@@ -1020,7 +1026,7 @@ pub fn encode_tx_block<T: Pixel>(
     let satd = get_satd(
       &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
       tx_size.width(), tx_size.height(), 8);
-    ts.rdo.add_rate_2(fi.base_q_idx, p, !mode.is_intra(), fi.width, fi.height,
+    ts.rdo.add_rate_2(fi.qps, p, !mode.is_intra(), fi.width, fi.height,
                       tx_dist as u64, cost_coeffs as u64, satd.into());
     ts.rdo.add_rate(fi.base_q_idx, tx_size, tx_dist as u64, cost_coeffs as u64);
   }
