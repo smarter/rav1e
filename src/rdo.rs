@@ -103,8 +103,8 @@ pub struct RDOPartitionOutput {
 pub struct RDOTracker {
   // rate_bins: Vec<Vec<Vec<u64>>>,
   // rate_counts: Vec<Vec<Vec<u64>>>,
-  mode_metrics_satd: [[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS-1],
-  rd_weight_satd: [[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]
+  mode_metrics_satd: Box<[[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS-1]>,
+  rd_weight_satd: Box<[[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]>
 }
 
 impl RDOTracker {
