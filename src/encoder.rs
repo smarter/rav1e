@@ -1027,20 +1027,21 @@ pub fn encode_tx_block<T: Pixel>(
     let tx_dist_scale_bits = 2*(3 - get_log_tx_scale(tx_size));
     let tx_dist_scale_rounding_offset = 1 << (tx_dist_scale_bits - 1);
     tx_dist = (tx_dist + tx_dist_scale_rounding_offset) >> tx_dist_scale_bits;
-  }
-  if fi.config.train_rdo {
-    if tx_size.width() != 8 || tx_size.height() != 8 {
-      // dbg!(tx_size, tx_type, plane_bsize, po);
-    } else {
+
+    if fi.config.train_rdo {
       assert!(tx_dist != -1);
-      let satd = get_satd(
-        &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-        tx_size.width(), tx_size.height(), 8);
-      rdotracker.with(|rdotracker_cell| {
-        rdotracker_cell.borrow_mut().add_rate(
-          fi.qps, p, !mode.is_intra(), fi.width, fi.height,
-          tx_dist as u64, cost_coeffs as u64, satd.into());
-      })
+      if tx_size.width() != 8 || tx_size.height() != 8 {
+        // dbg!(tx_size, tx_type, plane_bsize, po);
+      } else {
+        let satd = get_satd(
+          &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+          tx_size.width(), tx_size.height(), 8);
+        rdotracker.with(|rdotracker_cell| {
+          rdotracker_cell.borrow_mut().add_rate(
+            fi.qps, p, !mode.is_intra(), fi.width, fi.height,
+            tx_dist as u64, cost_coeffs as u64, satd.into());
+        })
+      }
     }
   }
 
