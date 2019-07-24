@@ -47,7 +47,7 @@ use arrayvec::*;
 use std::convert::TryInto;
 use serde_derive::{Serialize, Deserialize};
 
-#[derive(Copy,Clone,PartialEq)]
+#[derive(Copy,Clone,PartialEq, Debug)]
 pub enum RDOType {
   PixelDistRealRate,
   TxDistRealRate,
@@ -104,7 +104,8 @@ pub struct RDOTracker {
   // rate_bins: Vec<Vec<Vec<u64>>>,
   // rate_counts: Vec<Vec<Vec<u64>>>,
   mode_metrics_satd: Box<[[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS-1]>,
-  rd_weight_satd: Box<[[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]>
+  mode_rd_satd: Box<[[[[oc_mode_rd; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]>,
+  mode_rd_weight_satd: Box<[[[[f64; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]>
 }
 
 impl RDOTracker {
@@ -124,6 +125,13 @@ impl RDOTracker {
   fn merge_3d_array(new: &mut Vec<Vec<Vec<u64>>>, old: &[Vec<Vec<u64>>]) {
     for (n, o) in new.iter_mut().zip(old.iter()) {
       RDOTracker::merge_2d_array(n, o);
+    }
+  }
+  pub fn update(&mut self) {
+    unsafe {
+      oc_mode_metrics_update(
+        self.mode_metrics_satd.as_mut_ptr(), 4, 1,
+        self.mode_rd_satd.as_mut_ptr(), OC_SATD_SHIFT as i32, self.mode_rd_weight_satd.as_mut_ptr());
     }
   }
   pub fn merge_in(&mut self, input: &RDOTracker) {
@@ -162,6 +170,7 @@ impl RDOTracker {
   }
 
   pub fn print_code(&self) {
+    dbg!(self);
   }
 }
 

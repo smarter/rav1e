@@ -47,7 +47,13 @@ use std::sync::Arc;
 use std::fs::File;
 use arrayvec::*;
 
+use std::cell::RefCell;
+
 pub static TEMPORAL_DELIMITER: [u8; 2] = [0x12, 0x00];
+
+
+thread_local!(static rdotracker: RefCell<RDOTracker> = RefCell::new(Default::default()));
+
 
 const MAX_NUM_TEMPORAL_LAYERS: usize = 8;
 const MAX_NUM_SPATIAL_LAYERS: usize = 4;
@@ -315,7 +321,6 @@ pub struct FrameState<T: Pixel> {
   pub segmentation: SegmentationState,
   pub restoration: RestorationState,
   pub frame_mvs: Vec<FrameMotionVectors>,
-  pub t: RDOTracker,
 }
 
 impl<T: Pixel> FrameState<T> {
@@ -350,8 +355,7 @@ impl<T: Pixel> FrameState<T> {
           vec.push(FrameMotionVectors::new(fi.w_in_b, fi.h_in_b));
         }
         vec
-      },
-      t: RDOTracker::new()
+      }
     }
   }
 
@@ -1017,6 +1021,8 @@ pub fn encode_tx_block<T: Pixel>(
         let c = *a as i32 - *b as i32;
         (c * c) as u64
       }).sum::<u64>() as i64;
+    println!("needs_tx_dist");
+    dbg!(tx_dist);
 
     let tx_dist_scale_bits = 2*(3 - get_log_tx_scale(tx_size));
     let tx_dist_scale_rounding_offset = 1 << (tx_dist_scale_bits - 1);
@@ -1024,13 +1030,18 @@ pub fn encode_tx_block<T: Pixel>(
   }
   if fi.config.train_rdo {
     if tx_size.width() != 8 || tx_size.height() != 8 {
-      println!("skip block");
+      // dbg!(tx_size, tx_type, plane_bsize, po);
+    } else {
+      assert!(tx_dist != -1);
+      let satd = get_satd(
+        &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+        tx_size.width(), tx_size.height(), 8);
+      rdotracker.with(|rdotracker_cell| {
+        rdotracker_cell.borrow_mut().add_rate(
+          fi.qps, p, !mode.is_intra(), fi.width, fi.height,
+          tx_dist as u64, cost_coeffs as u64, satd.into());
+      })
     }
-    let satd = get_satd(
-      &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-      tx_size.width(), tx_size.height(), 8);
-    ts.rdo.add_rate(fi.qps, p, !mode.is_intra(), fi.width, fi.height,
-                    tx_dist as u64, cost_coeffs as u64, satd.into());
   }
 
   if rdo_type == RDOType::TxDistEstRate {
@@ -2062,16 +2073,14 @@ fn encode_tile_group<T: Pixel>(fi: &FrameInvariants<T>, fs: &mut FrameState<T>) 
   let initial_cdf = get_initial_cdfcontext(fi);
   let mut cdfs = vec![initial_cdf; ti.tile_count()];
 
-  let (raw_tiles, rdo_trackers): (Vec<_>, Vec<_>) = ti
+  let raw_tiles: Vec<Vec<u8>> = ti
     .tile_iter_mut(fs, &mut blocks)
     .zip(cdfs.iter_mut())
     .collect::<Vec<_>>()
     .into_par_iter()
     .map(|(mut ctx, cdf)| {
-      let raw = encode_tile(fi, &mut ctx.ts, cdf, &mut ctx.tb);
-      (raw, ctx.ts.rdo)
-    })
-    .unzip();
+      encode_tile(fi, &mut ctx.ts, cdf, &mut ctx.tb)
+    }).collect();
 
   /* TODO: Don't apply if lossless */
   deblock_filter_optimize(fi, fs, &blocks);
@@ -2094,17 +2103,22 @@ fn encode_tile_group<T: Pixel>(fi: &FrameInvariants<T>, fs: &mut FrameState<T>) 
 
   if fi.config.train_rdo {
     eprintln!("train rdo");
-    for rdo_tracker in &rdo_trackers {
-      fs.t.merge_in(&rdo_tracker);
-    }
-    if let Ok(mut file) = File::open("rdo.dat") {
-      let mut data = vec![];
-      file.read_to_end(&mut data).unwrap();
-      fs.t.merge_in(&deserialize(data.as_slice()).unwrap());
-    }
-    let mut rdo_file = File::create("rdo.dat").unwrap();
-    rdo_file.write_all(&serialize(&fs.t).unwrap()).unwrap();
-    fs.t.print_code();
+    // for rdo_tracker in &rdo_trackers {
+    //   fs.t.merge_in(&rdo_tracker);
+    // }
+    // let rdo_tracker = rdo_trackers[0];
+    rdotracker.with(|rdotracker_cell| {
+      rdotracker_cell.borrow_mut().update();
+      rdotracker_cell.borrow_mut().print_code();
+    })
+    // if let Ok(mut file) = File::open("rdo.dat") {
+    //   let mut data = vec![];
+    //   file.read_to_end(&mut data).unwrap();
+    //   fs.t.merge_in(&deserialize(data.as_slice()).unwrap());
+    // }
+    // let mut rdo_file = File::create("rdo.dat").unwrap();
+    // rdo_file.write_all(&serialize(&fs.t).unwrap()).unwrap();
+    // fs.t.print_code();
   }
 
   let (idx_max, max_len) = raw_tiles

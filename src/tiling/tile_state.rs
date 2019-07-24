@@ -56,7 +56,6 @@ pub struct TileStateMut<'a, T: Pixel> {
   pub segmentation: &'a SegmentationState,
   pub restoration: TileRestorationStateMut<'a>,
   pub mvs: Vec<TileMotionVectorsMut<'a>>,
-  pub rdo: RDOTracker,
 }
 
 impl<'a, T: Pixel> TileStateMut<'a, T> {
@@ -113,7 +112,6 @@ impl<'a, T: Pixel> TileStateMut<'a, T> {
           )
         })
         .collect(),
-      rdo: RDOTracker::new(),
     }
   }
 

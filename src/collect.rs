@@ -529,7 +529,7 @@ pub struct oc_iir_filter {
 }
 /*Statistics used to estimate R-D cost of a block in a given coding mode.
 See modedec.h for more details.*/
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, Default)]
 #[repr(C)]
 pub struct oc_mode_rd {
   pub rate: ogg_int16_t,
