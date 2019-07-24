@@ -139,8 +139,6 @@ impl RDOTracker {
       from dominating the statistics.*/
       let fragw = 1.0/((frame_w*frame_h) as f64);
 
-      // XX: using index wrong, needs to be actual lgo
-
       let q = qps.log_target_q >> 47; // Q57 to Q10
       let mut q_bin = 0;
       while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin] as i64) > q {
