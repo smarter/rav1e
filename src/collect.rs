@@ -1713,6 +1713,12 @@ pub unsafe extern fn oc_mode_metrics_update(
                 n
               )
             }
+            if r < 0.0 {
+              dbg!(m, s0, s1, q0, q1, ra, rb, rc, da, db, dc, n);
+              dbg!(pli, qti, qi, si);
+            }
+            assert!(r >= 0.0);
+            assert!(d >= 0.0);
             rate = -32768i32
               - (-32768i32
                 - ((ldexp(r, 6i32) + 0.5f64) as libc::c_int
@@ -1735,6 +1741,8 @@ pub unsafe extern fn oc_mode_metrics_update(
                     & -((32767i32 < (ldexp(d, 5i32) + 0.5f64) as libc::c_int)
                       as libc::c_int))
                   > -32768i32) as libc::c_int));
+            assert!(rate >= 0);
+            assert!(rmse >= 0);
             dr += abs(
               rate
                 - (*_table.offset(qi as isize))[pli as usize][qti as usize]
