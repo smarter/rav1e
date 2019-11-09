@@ -131,7 +131,7 @@ impl RDOTracker {
     unsafe {
       oc_mode_metrics_update(
         self.mode_metrics_satd.as_mut_ptr(), 4, 1,
-        self.mode_rd_satd.as_mut_ptr(), OC_SATD_SHIFT as i32, self.mode_rd_weight_satd.as_mut_ptr());
+        self.mode_rd_satd.as_mut_ptr(), (OC_SATD_SHIFT - 3) as i32, self.mode_rd_weight_satd.as_mut_ptr());
     }
   }
   pub fn merge_in(&mut self, input: &RDOTracker) {
@@ -139,14 +139,14 @@ impl RDOTracker {
     // RDOTracker::merge_3d_array(&mut self.rate_counts, &input.rate_counts);
   }
   pub fn add_rate(&mut self, qps: QuantizerParameters, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
-    let log_bw = 3; // valid for 8x8 blocks
-    let satd_bin = (satd >> (OC_SATD_SHIFT - (log_bw as usize))).min(OC_COMP_BINS as u64 - 1);
+    let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u64 - 1);
     let frag_bits = rate >> OD_BITRES;
     if fast_distortion != 0 {
       let sqrt_ssd = (fast_distortion as f64).sqrt();
       /*Weight the fragments by the inverse frame size; this prevents HD content
       from dominating the statistics.*/
-      let fragw = 1.0/((frame_w*frame_h) as f64);
+      // let fragw = 1.0/(580.0*100.0);// 1.0/((frame_w*frame_h) as f64);
+      let fragw = 1.0;// 1.0/((frame_w*frame_h) as f64);
 
       let q = qps.log_target_q >> 47; // Q57 to Q10
       let mut q_bin = 0;
@@ -167,6 +167,7 @@ impl RDOTracker {
           sqrt_ssd
         )
       }
+      // dbg!(self.mode_metrics_satd[q_bin][pli][is_inter_block as usize][satd_bin as usize]);
     }
   }
 

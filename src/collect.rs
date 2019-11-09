@@ -1394,7 +1394,58 @@ pub unsafe extern fn oc_mode_metrics_solve(
         + (c2 + 2i32 as libc::c_double * c3 * ds) * sq2
         + sqd
         + c3 * s2q2)
-        / sq10
+        / sq10;
+
+      if rxy < 0.0 || xx < 0.0 {
+        dbg!(
+          i,
+          (*_metrics.offset(i as isize)).s / w,
+          *_s0.offset(i as isize)
+        );
+        dbg!(
+          s10,
+          q10,
+          sq10,
+          ds,
+          dq,
+          ds2,
+          dq2,
+          r,
+          d,
+          s2,
+          sq,
+          q2,
+          sr,
+          qr,
+          sd,
+          qd,
+          s2q,
+          sq2,
+          sqr,
+          sqd,
+          s2q2,
+          c0,
+          c1,
+          c2,
+          c3,
+          w,
+        );
+        dbg!(xx, rxy, dxy, wt, i);
+        dbg!(ds * dq * (r + c0 + c1 * ds + c2 * dq + c3 * ds * dq) * w
+        , (c1 * dq + c3 * dq2) * s2
+        , (r
+          + c0
+          + 2i32 as libc::c_double
+            * (c1 * ds + (c2 + 2i32 as libc::c_double * c3 * ds) * dq))
+          * sq
+        , (c2 * ds + c3 * ds2) * q2
+        , dq * sr
+        , ds * qr
+        , (c1 + 2i32 as libc::c_double * c3 * dq) * s2q
+        , (c2 + 2i32 as libc::c_double * c3 * ds) * sq2
+        , sqr
+        , c3 * s2q2);
+      }
     }
     i += 1
   }
@@ -1716,6 +1767,7 @@ pub unsafe extern fn oc_mode_metrics_update(
             if r < 0.0 {
               dbg!(m, s0, s1, q0, q1, ra, rb, rc, da, db, dc, n);
               dbg!(pli, qti, qi, si);
+              dbg!(r, d);
             }
             assert!(r >= 0.0);
             assert!(d >= 0.0);
