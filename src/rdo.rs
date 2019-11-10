@@ -153,7 +153,7 @@ impl RDOTracker {
       while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin+1] as i64) > q {
         q_bin += 1;
       }
-      dbg!(q, q_bin, satd, satd_bin, fragw, frag_bits, fast_distortion, sqrt_ssd);
+      // dbg!(q, q_bin, satd, satd_bin, fragw, frag_bits, fast_distortion, sqrt_ssd);
 
       unsafe {
         oc_mode_metrics_add(

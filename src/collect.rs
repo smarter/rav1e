@@ -1396,6 +1396,7 @@ pub unsafe extern fn oc_mode_metrics_solve(
         + c3 * s2q2)
         / sq10;
 
+/*
       if rxy < 0.0 || xx < 0.0 {
         dbg!(
           i,
@@ -1445,7 +1446,7 @@ pub unsafe extern fn oc_mode_metrics_solve(
         , (c2 + 2i32 as libc::c_double * c3 * ds) * sq2
         , sqr
         , c3 * s2q2);
-      }
+      }*/
     }
     i += 1
   }
@@ -1764,13 +1765,20 @@ pub unsafe extern fn oc_mode_metrics_update(
                 n
               )
             }
-            if r < 0.0 {
+            /*if r < 0.0 {
               dbg!(m, s0, s1, q0, q1, ra, rb, rc, da, db, dc, n);
               dbg!(pli, qti, qi, si);
               dbg!(r, d);
+            }*/
+            // assert!(r >= 0.0);
+            if r < 0.0 {
+              dbg!("Negative r: {}", r);
+              r = 0.0; // ¯\_(ツ)_/¯
             }
-            assert!(r >= 0.0);
-            assert!(d >= 0.0);
+            if d < 0.0 {
+              dbg!("Negative d: {}", d);
+              d = 0.0; // ¯\_(ツ)_/¯
+            }
             rate = -32768i32
               - (-32768i32
                 - ((ldexp(r, 6i32) + 0.5f64) as libc::c_int
