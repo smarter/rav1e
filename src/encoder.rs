@@ -2110,16 +2110,18 @@ fn encode_tile_group<T: Pixel>(fi: &FrameInvariants<T>, fs: &mut FrameState<T>) 
     // }
     // let rdo_tracker = rdo_trackers[0];
     rdotracker.with(|rdotracker_cell| {
-      rdotracker_cell.borrow_mut().update();
-      rdotracker_cell.borrow_mut().print_code();
-    })
+      // rdotracker_cell.borrow_mut().update();
+      // rdotracker_cell.borrow_mut().print_code();
+      // let mut rdo_file = File::create("rdo.dat").unwrap();
+      // rdo_file.write_all(serde_json::to_string(&rdotracker_cell).unwrap().as_bytes()).unwrap();
+      // dbg!(&rdotracker_cell);
+      rdotracker_cell.borrow_mut().dump();
+    });
     // if let Ok(mut file) = File::open("rdo.dat") {
     //   let mut data = vec![];
     //   file.read_to_end(&mut data).unwrap();
     //   fs.t.merge_in(&deserialize(data.as_slice()).unwrap());
     // }
-    // let mut rdo_file = File::create("rdo.dat").unwrap();
-    // rdo_file.write_all(&serialize(&fs.t).unwrap()).unwrap();
     // fs.t.print_code();
   }
 

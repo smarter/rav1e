@@ -10,6 +10,10 @@ extern crate libc;
 
 use serde_derive::{Serialize, Deserialize};
 
+use std::env;
+
+use crate::rdo_tables::*;
+
 use c2rust_bitfields::BitfieldStruct;
 extern {
   pub type _IO_wide_data;
@@ -901,12 +905,17 @@ pub type oc_token_skip_func =
 ********************************************************************/
 
 #[no_mangle]
-pub static OC_MODE_LOGQ: [i16; 8/*OC_LOGQ_BINS*/] =
-  [ 0x1F05, 0x1C9A, 0x1A31, 0x17B0, 0x152F, 0x12F1, 0x0FF3, /*0x0E1F*/ 0 ];
-
-  // [ 0x1CB8, 0x1BDD, 0x1ADB, 0x19A3, 0x1817, 0x15F8, 0x1293, 0x094A ];
-// [ 0x2B58, 0x2A75, 0x296A, 0x2822, 0x267D, 0x242D, 0x2044, 0x0C00 ];
-  // [ 0x27E7, 0x246A, 0x2103, 0x1DD7, 0x1ACD, 0x1899, 0x1524, 0x0800 ];
+pub static OC_MODE_LOGQ: [[[i16; 2]; 3]; 8/*OC_LOGQ_BINS*/] =
+  [
+    [ [0x1F05,0x2101],[0x206E,0x2101],[0x206E,0x2101] ],
+    [ [0x1C9A,0x1EAC],[0x1E0E,0x1EAC],[0x1E0E,0x1EAC] ],
+    [ [0x1A31,0x1C48],[0x1B6F,0x1C48],[0x1B6F,0x1C48] ],
+    [ [0x17B0,0x19E7],[0x1938,0x19E7],[0x1938,0x19E7] ],
+    [ [0x152F,0x178F],[0x16AB,0x178F],[0x16AB,0x178F] ],
+    [ [0x12F1,0x1534],[0x145D,0x1534],[0x145D,0x1534] ],
+    [ [0x0FF3,0x1321],[0x11BE,0x1321],[0x11BE,0x1321] ],
+    [ [0, 0], [0, 0], [0, 0] ]
+  ];
 
 #[no_mangle]
 pub static mut OC_HAS_MODE_METRICS: libc::c_int = 0;
@@ -962,9 +971,6 @@ pub static mut OC_MODE_METRICS_SAD: [[[[oc_mode_metrics; 24]; 2]; 3]; 7] =
     sqd: 0.,
     s2q2: 0.
   }; 24]; 2]; 3]; 7];
-#[no_mangle]
-pub static mut OC_MODE_METRICS_FILENAME: *const libc::c_char =
-  b"modedec.stats\x00" as *const u8 as *const libc::c_char;
 #[no_mangle]
 pub unsafe extern fn oc_mode_metrics_add(
   mut _metrics: *mut oc_mode_metrics, mut _w: libc::c_double,
@@ -1532,8 +1538,8 @@ pub unsafe extern fn oc_mode_metrics_update(
             let mut n: libc::c_int = 0;
             n = 0i32;
             if qi > 0i32 && si > 0i32 {
-              q0[n as usize] = OC_MODE_LOGQ[(qi - 1i32) as usize] as libc::c_int;
-              q1[n as usize] = OC_MODE_LOGQ[qi as usize] as libc::c_int;
+              q0[n as usize] = OC_MODE_LOGQ[(qi - 1i32) as usize][pli as usize][qti as usize] as libc::c_int;
+              q1[n as usize] = OC_MODE_LOGQ[qi as usize][pli as usize][qti as usize] as libc::c_int;
               s0[n as usize] = si - 1i32 << _shift;
               s1[n as usize] = si << _shift;
               ra[n as usize] = ldexp(
@@ -1582,8 +1588,8 @@ pub unsafe extern fn oc_mode_metrics_update(
             }
             if qi > 0i32 {
               ds = if si + 1i32 < 24i32 { 1i32 } else { -1i32 };
-              q0[n as usize] = OC_MODE_LOGQ[(qi - 1i32) as usize] as libc::c_int;
-              q1[n as usize] = OC_MODE_LOGQ[qi as usize] as libc::c_int;
+              q0[n as usize] = OC_MODE_LOGQ[(qi - 1i32) as usize][pli as usize][qti as usize] as libc::c_int;
+              q1[n as usize] = OC_MODE_LOGQ[qi as usize][pli as usize][qti as usize] as libc::c_int;
               s0[n as usize] = si + ds << _shift;
               s1[n as usize] = si << _shift;
               ra[n as usize] = ldexp(
@@ -1630,8 +1636,8 @@ pub unsafe extern fn oc_mode_metrics_update(
                 .offset(si as isize)
             }
             if qi + 1i32 < 8i32 && si > 0i32 {
-              q0[n as usize] = OC_MODE_LOGQ[(qi + 1i32) as usize] as libc::c_int;
-              q1[n as usize] = OC_MODE_LOGQ[qi as usize] as libc::c_int;
+              q0[n as usize] = OC_MODE_LOGQ[(qi + 1i32) as usize][pli as usize][qti as usize] as libc::c_int;
+              q1[n as usize] = OC_MODE_LOGQ[qi as usize][pli as usize][qti as usize] as libc::c_int;
               s0[n as usize] = si - 1i32 << _shift;
               s1[n as usize] = si << _shift;
               ra[n as usize] = ldexp(
@@ -1680,8 +1686,8 @@ pub unsafe extern fn oc_mode_metrics_update(
             }
             if qi + 1i32 < 8i32 {
               ds = if si + 1i32 < 24i32 { 1i32 } else { -1i32 };
-              q0[n as usize] = OC_MODE_LOGQ[(qi + 1i32) as usize] as libc::c_int;
-              q1[n as usize] = OC_MODE_LOGQ[qi as usize] as libc::c_int;
+              q0[n as usize] = OC_MODE_LOGQ[(qi + 1i32) as usize][pli as usize][qti as usize] as libc::c_int;
+              q1[n as usize] = OC_MODE_LOGQ[qi as usize][pli as usize][qti as usize] as libc::c_int;
               s0[n as usize] = si + ds << _shift;
               s1[n as usize] = si << _shift;
               ra[n as usize] = ldexp(
@@ -1875,3 +1881,30 @@ pub unsafe extern fn oc_mode_metrics_update(
   };
 }
 
+/*Dump the in memory mode metrics to a file.
+Note this data format isn't portable between different platforms.*/
+#[no_mangle]
+pub unsafe extern fn oc_mode_metrics_dump(mode_metrics_satd: *const [[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS-1]) {
+  let mut fmetrics: *mut FILE = 0 as *mut FILE;
+  let filename = libc::getenv(b"OD_MODE_METRICS_FILENAME\x00" as *const u8 as *const libc::c_char);
+  fmetrics = fopen(
+    filename,
+    b"wb\x00" as *const u8 as *const libc::c_char
+  );
+  if !fmetrics.is_null() {
+    fwrite(
+      OC_MODE_LOGQ.as_ptr() as *const libc::c_void,
+      ::std::mem::size_of::<[[[ogg_int16_t; 2]; 3]; 8]>() as libc::c_ulong,
+      1i32 as libc::c_ulong,
+      fmetrics
+    );
+    fwrite(
+      mode_metrics_satd as *const libc::c_void,
+      ::std::mem::size_of::<[[[[oc_mode_metrics; 24]; 2]; 3]; 7]>()
+        as libc::c_ulong,
+      1i32 as libc::c_ulong,
+      fmetrics
+    );
+    fclose(fmetrics);
+  };
+}
