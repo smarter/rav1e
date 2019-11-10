@@ -146,7 +146,7 @@ impl RDOTracker {
       /*Weight the fragments by the inverse frame size; this prevents HD content
       from dominating the statistics.*/
       // let fragw = 1.0/(580.0*100.0);// 1.0/((frame_w*frame_h) as f64);
-      let fragw = 1.0;// 1.0/((frame_w*frame_h) as f64);
+      let fragw = 1.0/((frame_w*frame_h) as f64);
 
       let q = qps.log_target_q >> 47; // Q57 to Q10
       let mut q_bin = 0;
