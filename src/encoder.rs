@@ -1026,7 +1026,7 @@ pub fn encode_tx_block<T: Pixel>(
     let tx_dist_scale_rounding_offset = 1 << (tx_dist_scale_bits - 1);
     tx_dist = (tx_dist + tx_dist_scale_rounding_offset) >> tx_dist_scale_bits;
 
-    if fi.config.train_rdo {
+    if fi.config.train_rdo && has_coeff {
       if tx_size.width() != 8 || tx_size.height() != 8 {
         // dbg!(tx_size, tx_type, plane_bsize, po);
       } else {
