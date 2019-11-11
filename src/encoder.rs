@@ -973,6 +973,12 @@ pub fn encode_tx_block<T: Pixel>(
     mode.predict_intra(tile_rect, &mut rec.subregion_mut(area), tx_size, bit_depth, &ac, alpha, &edge_buf);
   }
 
+  // TODO: is the prediction available at this point for inter ?
+  // TODO: only needed when train_rdo is true
+  let satd = get_satd(
+    &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+    tx_size.width(), tx_size.height(), 8);
+
   if skip { return (false, -1); }
 
   let mut residual_storage: AlignedArray<[i16; 64 * 64]> = UninitializedAlignedArray();
@@ -1030,9 +1036,6 @@ pub fn encode_tx_block<T: Pixel>(
       if tx_size.width() != 8 || tx_size.height() != 8 {
         // dbg!(tx_size, tx_type, plane_bsize, po);
       } else {
-        let satd = get_satd(
-          &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-          tx_size.width(), tx_size.height(), 8);
         assert!(tx_dist != -1);
         assert!(satd >= 0);
         assert!(cost_coeffs > 0);
