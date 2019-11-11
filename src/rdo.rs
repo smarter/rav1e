@@ -131,7 +131,7 @@ impl RDOTracker {
     unsafe {
       oc_mode_metrics_update(
         self.mode_metrics_satd.as_mut_ptr(), 4, 1,
-        self.mode_rd_satd.as_mut_ptr(), OC_SATD_SHIFT as i32, self.mode_rd_weight_satd.as_mut_ptr());
+        self.mode_rd_satd.as_mut_ptr(), (OC_SATD_SHIFT - 3) as i32, self.mode_rd_weight_satd.as_mut_ptr());
     }
   }
   pub fn merge_in(&mut self, input: &RDOTracker) {
@@ -139,7 +139,8 @@ impl RDOTracker {
     // RDOTracker::merge_3d_array(&mut self.rate_counts, &input.rate_counts);
   }
   pub fn add_rate(&mut self, qps: QuantizerParameters, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
-    let satd_bin = (satd >> OC_SATD_SHIFT).min(OC_COMP_BINS as u64 - 1);
+    // OC_SATD_SHIFT is what theora does, add "- 3" because our satd is already normalized for 8x8 blocks
+    let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u64 - 1);
     let frag_bits = rate >> OD_BITRES;
     if fast_distortion != 0 {
       let sqrt_ssd = (fast_distortion as f64).sqrt();
@@ -161,7 +162,8 @@ impl RDOTracker {
             .as_mut_ptr()
             .offset(satd_bin as isize),
           fragw,
-          satd as libc::c_int,
+          // Normalized for 8x8, compensate for use of OC_SATD_SHIFT in theora code
+          (satd << 3) as libc::c_int,
           q as libc::c_int,
           frag_bits.try_into().unwrap(),
           sqrt_ssd
