@@ -495,16 +495,17 @@ fn compute_mean_importance<T: Pixel>(
 pub fn compute_distortion_bias<T: Pixel>(
   fi: &FrameInvariants<T>, frame_bo: PlaneBlockOffset, bsize: BlockSize,
 ) -> f64 {
-  let mean_importance = compute_mean_importance(fi, frame_bo, bsize);
+  // let mean_importance = compute_mean_importance(fi, frame_bo, bsize);
 
-  // Chosen based on a series of AWCY runs.
-  const FACTOR: f32 = 3.;
-  const ADDEND: f64 = 0.65;
+  // // Chosen based on a series of AWCY runs.
+  // const FACTOR: f32 = 7.0;
+  // // const ADDEND: f64 = 0.65;
 
-  let bias = (mean_importance / FACTOR) as f64 + ADDEND;
-  debug_assert!(bias.is_finite());
+  // let bias = 1.0 + (mean_importance / FACTOR) as f64;
+  // debug_assert!(bias.is_finite());
 
-  bias
+  // bias
+  1.0
 }
 
 #[repr(transparent)]
