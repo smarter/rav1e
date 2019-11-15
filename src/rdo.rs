@@ -653,31 +653,31 @@ fn luma_chroma_mode_rdo<T: Pixel>(
     // If quantizer RDO is disabled, sidx isn't coded either.
     let sidx_range = if skip {
       0..=0
-    } else if !fi.config.speed_settings.quantizer_rdo {
-      let importance =
-        compute_mean_importance(fi, ts.to_frame_block_offset(tile_bo), bsize);
-      // Chosen based on the RDO segment ID statistics for speed 2 on the DOTA2
-      // clip. More precisely:
-      // - Mean importance and the corresponding best sidx chosen by RDO were
-      //   dumped from encoding the DOTA2 clip on --speed 2.
-      // - The values were plotted in a logarithmic 2D histogram.
-      // - Based on that, the value below were chosen.
-      let heuristic_sidx = match importance {
-        x if x >= 0. && x < 2. => 1,
-        x if x >= 2. && x < 4. => 0,
-        x if x >= 4. => 2,
-        _ => unreachable!(),
-      };
-      // prevent the highest sidx from bringing us into lossless
-      if fi.base_q_idx as i16
-        + ts.segmentation.data[heuristic_sidx as usize]
-          [SegLvl::SEG_LVL_ALT_Q as usize]
-        < 1
-      {
-        0..=0
-      } else {
-        heuristic_sidx..=heuristic_sidx
-      }
+    // } else if !fi.config.speed_settings.quantizer_rdo {
+    //   let importance =
+    //     compute_mean_importance(fi, ts.to_frame_block_offset(tile_bo), bsize);
+    //   // Chosen based on the RDO segment ID statistics for speed 2 on the DOTA2
+    //   // clip. More precisely:
+    //   // - Mean importance and the corresponding best sidx chosen by RDO were
+    //   //   dumped from encoding the DOTA2 clip on --speed 2.
+    //   // - The values were plotted in a logarithmic 2D histogram.
+    //   // - Based on that, the value below were chosen.
+    //   let heuristic_sidx = match importance {
+    //     x if x >= 0. && x < 2. => 1,
+    //     x if x >= 2. && x < 4. => 0,
+    //     x if x >= 4. => 2,
+    //     _ => unreachable!(),
+    //   };
+    //   // prevent the highest sidx from bringing us into lossless
+    //   if fi.base_q_idx as i16
+    //     + ts.segmentation.data[heuristic_sidx as usize]
+    //       [SegLvl::SEG_LVL_ALT_Q as usize]
+    //     < 1
+    //   {
+    //     0..=0
+    //   } else {
+    //     heuristic_sidx..=heuristic_sidx
+    //   }
     } else if fi.base_q_idx as i16
       + ts.segmentation.data[2][SegLvl::SEG_LVL_ALT_Q as usize]
       < 1
