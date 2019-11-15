@@ -942,6 +942,7 @@ impl<T: Pixel> ContextInner<T> {
             let propagate_amount = (intra_cost + future_importance)
               * propagate_fraction
               / unique_indices.len() as f32;
+             // dbg!(inter_cost,intra_cost,future_importance,propagate_fraction,propagate_amount);
 
             if let Some(reference_frame_block_importances) = self
               .frame_invariants
@@ -1062,9 +1063,10 @@ impl<T: Pixel> ContextInner<T> {
 
           let importance = &mut fi.block_importances[y * fi.w_in_imp_b + x];
           if intra_cost > 0. {
-            *importance = (1. + *importance / intra_cost).log2();
+            // *importance = ((intra_cost + *importance) / intra_cost).log2();
           } else {
-            *importance = 0.;
+            assert!(*importance == 0.);
+            // *importance = 0.;
           }
 
           assert!(*importance >= 0.);

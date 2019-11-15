@@ -476,36 +476,46 @@ fn compute_tx_distortion<T: Pixel>(
 
 fn compute_mean_importance<T: Pixel>(
   fi: &FrameInvariants<T>, frame_bo: PlaneBlockOffset, bsize: BlockSize,
-) -> f32 {
+) -> f64 {
   let x1 = frame_bo.0.x;
   let y1 = frame_bo.0.y;
   let x2 = (x1 + bsize.width_mi()).min(fi.w_in_b);
   let y2 = (y1 + bsize.height_mi()).min(fi.h_in_b);
 
-  let mut total_importance = 0.;
+  let mut total_importance: f64 = 0.;
   for y in y1..y2 {
     for x in x1..x2 {
-      total_importance += fi.block_importances[y / 2 * fi.w_in_imp_b + x / 2];
+      let importance = fi.block_importances[y / 2 * fi.w_in_imp_b + x / 2] as f64;
+      let intra_cost = fi.lookahead_intra_costs[y / 2 * fi.w_in_imp_b + x / 2] as f64;
+      total_importance += (intra_cost + importance) / intra_cost;
     }
   }
   // Divide by the full area even though some blocks were outside.
-  total_importance / (bsize.width_mi() * bsize.height_mi()) as f32
+  // (
+    total_importance / (bsize.width_mi() * bsize.height_mi()) as f64  //,
+    // total_intra_cost
+  // )
 }
 
 pub fn compute_distortion_bias<T: Pixel>(
   fi: &FrameInvariants<T>, frame_bo: PlaneBlockOffset, bsize: BlockSize,
 ) -> f64 {
-  // let mean_importance = compute_mean_importance(fi, frame_bo, bsize);
+  // let (mean_importance, mean_intra_cost) = compute_mean_importance(fi, frame_bo, bsize);
+  let mean_importance = compute_mean_importance(fi, frame_bo, bsize);
 
-  // // Chosen based on a series of AWCY runs.
-  // const FACTOR: f32 = 7.0;
-  // // const ADDEND: f64 = 0.65;
+  // Chosen based on a series of AWCY runs.
+  // const FACTOR: f32 = 3.;
+  // const ADDEND: f64 = 0.65;
 
-  // let bias = 1.0 + (mean_importance / FACTOR) as f64;
+  // let bias = (mean_importance / FACTOR) as f64 + ADDEND;
   // debug_assert!(bias.is_finite());
 
-  // bias
-  1.0
+  // dbg!(mean_intra_cost, mean_importance);
+  // let scale = ((mean_intra_cost + mean_importance) / mean_intra_cost).powf(-2.0/3.0);
+  let damp_factor = 10.0; // 1.0 should match the mbtree paper, way too strong here
+  let scale = mean_importance.powf(2.0/(3.0*damp_factor));
+  // dbg!(scale);
+  scale
 }
 
 #[repr(transparent)]
