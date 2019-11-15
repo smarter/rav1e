@@ -1183,7 +1183,7 @@ pub fn encode_tx_block<T: Pixel>(
    }*/
 
   let tell_coeffs = w.tell_frac();
-  let has_coeff = if need_recon_pixel /*| rdo_type.needs_coeff_rate() */{
+  let has_coeff = if need_recon_pixel || rdo_type.needs_coeff_rate() {
     cw.write_coeffs_lv_map(
       w,
       p,
@@ -1252,6 +1252,7 @@ pub fn encode_tx_block<T: Pixel>(
     let estimated_rate = estimate_rate(fi.base_q_idx, tx_size, tx_dist);
     w.add_bits_frac(estimated_rate as u32);
   }
+  w.add_bits_frac(cost_coeffs*100);
   let bias =
     compute_distortion_bias(fi, ts.to_frame_block_offset(tile_bo), bsize);
   (has_coeff, RawDistortion::new(tx_dist) * bias * fi.dist_scale[p])
