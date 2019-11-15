@@ -1178,12 +1178,12 @@ pub fn encode_tx_block<T: Pixel>(
 
   ts.qc.quantize(coeffs, qcoeffs, tx_size, tx_type);
 
-  if !need_recon_pixel {
+  /*ifif !need_recon_pixel {
    return (true, RawDistortion::new(0)*0.0*0.0);
-   }
+   }*/
 
   let tell_coeffs = w.tell_frac();
-  let has_coeff = if need_recon_pixel || rdo_type.needs_coeff_rate() {
+  let has_coeff = if need_recon_pixel /*| rdo_type.needs_coeff_rate() */{
     cw.write_coeffs_lv_map(
       w,
       p,
