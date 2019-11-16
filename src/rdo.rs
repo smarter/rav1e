@@ -702,7 +702,8 @@ fn luma_chroma_mode_rdo<T: Pixel>(
       0..=2
     };
 
-    for sidx in sidx_range {
+    // for sidx in sidx_range {
+    let sidx = 0;
       cw.bc.blocks.set_segmentation_idx(tile_bo, bsize, sidx);
 
       let (tx_size, tx_type) = rdo_tx_size_type(
@@ -782,7 +783,7 @@ fn luma_chroma_mode_rdo<T: Pixel>(
 
         cw.rollback(cw_checkpoint);
       }
-    }
+    // }
 
     zero_distortion
   };
