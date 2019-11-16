@@ -487,7 +487,12 @@ fn compute_mean_importance<T: Pixel>(
     for x in x1..x2 {
       let importance = fi.block_importances[y / 2 * fi.w_in_imp_b + x / 2] as f64;
       let intra_cost = fi.lookahead_intra_costs[y / 2 * fi.w_in_imp_b + x / 2] as f64;
-      total_importance += (intra_cost + importance) / intra_cost;
+      total_importance +=
+        if intra_cost == 0. {
+          0.
+        } else {
+          (intra_cost + importance) / intra_cost
+        };
     }
   }
   // Divide by the full area even though some blocks were outside.
