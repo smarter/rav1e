@@ -517,7 +517,7 @@ pub fn compute_distortion_bias<T: Pixel>(
 
   // dbg!(mean_intra_cost, mean_importance);
   // let scale = ((mean_intra_cost + mean_importance) / mean_intra_cost).powf(-2.0/3.0);
-  let damp_factor = 2.0; // 1.0 should match the mbtree paper, way too strong here
+  let damp_factor = 1.0; // 1.0 should match the mbtree paper, way too strong here
   let scale = mean_importance.powf(2.0/(3.0*damp_factor));
   // dbg!(scale);
   scale
