@@ -1065,8 +1065,8 @@ impl<T: Pixel> ContextInner<T> {
           if intra_cost > 0. {
             // *importance = ((intra_cost + *importance) / intra_cost).log2();
           } else {
-            assert!(*importance == 0.);
-            // *importance = 0.;
+            // assert!(*importance == 0.);
+            *importance = 0.;
           }
 
           assert!(*importance >= 0.);
