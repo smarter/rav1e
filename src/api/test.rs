@@ -1657,7 +1657,6 @@ fn log_q_exp_overflow() {
         fast_scene_detection: false,
         diamond_me: true,
         cdef: true,
-        quantizer_rdo: false,
         use_satd_subpel: false,
         non_square_partition: false,
         ..Default::default()
@@ -1720,7 +1719,6 @@ fn guess_frame_subtypes_assert() {
         fast_scene_detection: false,
         diamond_me: true,
         cdef: true,
-        quantizer_rdo: false,
         use_satd_subpel: false,
         non_square_partition: false,
         ..Default::default()
