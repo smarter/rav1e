@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
 import struct
 import sys
 from os.path import splitext
@@ -7,7 +9,9 @@ from matplotlib import pyplot as plt
 
 
 # Renders block importances output by ContextInner::compute_lookahead_data().
-# Usage: draw-importances.py <i-hres.png> <i-imps.bin>
+# Usage:
+#        cargo run --features=dump_lookahead_data <input.y4m> -o /dev/null
+#        draw-importances.py <i-hres.png> <i-imps.bin>
 #        will output i-imps.png.
 
 
