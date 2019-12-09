@@ -47,7 +47,7 @@ serialize = ["serde", "toml"]
 # - i-qres.png: quarter-resolution luma planes,
 # - i-hres.png: half-resolution luma planes,
 # - i-mvs.bin: motion vectors,
-# - i-imps.bin: block importances.
+# - i-imps.bin: block importances and intra costs.
 dump_lookahead_data = ["byteorder", "image"]
 
 [dependencies]
