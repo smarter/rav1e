@@ -398,6 +398,9 @@ pub fn compute_distortion_scale<T: Pixel>(
   let x2 = (x1 + (bsize.width_mi() / 2).max(1)).min(fi.w_in_imp_b);
   let y2 = (y1 + (bsize.height_mi() / 2).max(1)).min(fi.h_in_imp_b);
 
+  assert!(x2-x1==1);
+  assert!(y2-y1==1);
+
   let mut total_propagate_cost = 0_f64;
   let mut total_intra_cost = 0_f64;
   for y in y1..y2 {
