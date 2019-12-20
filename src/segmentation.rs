@@ -10,6 +10,7 @@
 use crate::context::*;
 use crate::header::PRIMARY_REF_NONE;
 use crate::util::Pixel;
+use crate::quantize::*;
 use crate::FrameInvariants;
 use crate::FrameState;
 
@@ -24,6 +25,27 @@ pub fn segmentation_optimize<T: Pixel>(
 
     // We don't change the values between frames.
     fs.segmentation.update_data = fi.primary_ref_frame == PRIMARY_REF_NONE;
+
+    let mut deltas = vec!();
+
+    for y in 0..fi.h_in_imp_b {
+      for x in 0..fi.w_in_imp_b {
+        let intra_cost = fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64;
+        let propagate_cost = fi.block_importances[y * fi.w_in_imp_b + x] as f64;
+        let q_scale =
+          if intra_cost == 0. {
+            1.
+          } else {
+            let strength = 1.0;
+            let frac = (intra_cost + propagate_cost) / intra_cost;
+            frac.powf(-strength / 6.0)
+          };
+        let base_q = ac_q(fi.base_q_idx, 0, fi.config.bit_depth);
+        let scaled_q = ((base_q as f64)*q_scale).round() as i64;
+        let scaled_q_idx = select_ac_qi(scaled_q, fi.config.bit_depth);
+        deltas.push(scaled_q_idx as i16 - fi.base_q_idx as i16);
+      }
+    }
 
     if !fs.segmentation.update_data {
       return;
