@@ -3458,7 +3458,7 @@ impl<'a> ContextWriter<'a> {
     symbol_with_update!(self, w, skip as u32, &mut self.fc.skip_cdfs[ctx]);
   }
 
-  fn get_segment_pred(&self, bo: TileBlockOffset) -> (u8, u8) {
+  pub fn get_segment_pred(&self, bo: TileBlockOffset) -> (u8, u8) {
     let mut prev_ul = -1;
     let mut prev_u = -1;
     let mut prev_l = -1;
