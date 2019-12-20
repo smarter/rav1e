@@ -83,7 +83,7 @@ pub fn segmentation_optimize<T: Pixel>(
     // enforcement elsewhere is needed.
     let offset_lower_limit = 1 - fi.base_q_idx as i16;
 
-    for (i, &delta) in qi_deltas.iter().take(3).enumerate() {
+    for (i, &delta) in qi_deltas.iter().take(8).enumerate() {
       fs.segmentation.features[i][SegLvl::SEG_LVL_ALT_Q as usize] = true;
       fs.segmentation.data[i][SegLvl::SEG_LVL_ALT_Q as usize] = delta;
     }
