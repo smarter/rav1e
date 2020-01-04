@@ -492,7 +492,7 @@ pub fn compute_distortion_scale<T: Pixel>(
     return 1.; // no scaling
   }
 
-  let strength = 1.0; // empirical, see comment above
+  let strength = 2.0; // empirical, see comment above
   let frac = (total_intra_cost + total_propagate_cost) / total_intra_cost;
   frac.powf(strength / 3.0)
 }
