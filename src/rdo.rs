@@ -453,9 +453,7 @@ pub fn compute_distortion_scale<T: Pixel>(
       total_ratio +=
         (fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64 + fi.block_importances[y * fi.w_in_imp_b + x] as f64) / (fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64);
 
-      if fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] != 0 {
-        total_n += 1;
-      }
+      total_n += 1;
     }
   }
 
