@@ -442,7 +442,7 @@ pub fn compute_distortion_scale<T: Pixel>(
 
   let mut total_propagate_cost = 0_f64;
   let mut total_intra_cost = 0_f64;
-  let mut total_ratio = 0_f64;
+  let mut max_ratio = 0_f64;
   let mut total_n = 0;
   for y in y1..y2 {
     for x in x1..x2 {
@@ -450,12 +450,8 @@ pub fn compute_distortion_scale<T: Pixel>(
         fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64;
       total_propagate_cost +=
         fi.block_importances[y * fi.w_in_imp_b + x] as f64;
-      total_ratio +=
-        (fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64 + fi.block_importances[y * fi.w_in_imp_b + x] as f64) / (fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64);
-
-      if fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] != 0 {
-        total_n += 1;
-      }
+      max_ratio = max_ratio.max(
+        (fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64 + fi.block_importances[y * fi.w_in_imp_b + x] as f64) / (fi.lookahead_intra_costs[y * fi.w_in_imp_b + x] as f64));
     }
   }
 
@@ -502,7 +498,7 @@ pub fn compute_distortion_scale<T: Pixel>(
 
   let strength = 1.0; // empirical, see comment above
   // let frac = (total_intra_cost + total_propagate_cost) / total_intra_cost;
-  let frac = total_ratio / total_n as f64;
+  let frac = max_ratio;
   frac.powf(strength / 3.0)
 }
 
