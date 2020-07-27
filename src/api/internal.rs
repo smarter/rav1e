@@ -940,8 +940,7 @@ impl<T: Pixel> ContextInner<T> {
                   };
 
                   let propagate_amount = (intra_cost + future_importance)
-                    * propagate_fraction
-                    / len as f32;
+                    * propagate_fraction;
 
                   let mut propagate =
                     |block_x_in_mv_units, block_y_in_mv_units, fraction| {
