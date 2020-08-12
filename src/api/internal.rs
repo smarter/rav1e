@@ -864,7 +864,7 @@ impl<T: Pixel> ContextInner<T> {
               height: IMPORTANCE_BLOCK_SIZE,
             });
 
-            let mut best_inter_cost = u32::MAX;
+            let mut best_inter_cost = 0;
             let mut best_mv_index = 0;
             let mut best_rec_index = 0;
 
@@ -901,7 +901,7 @@ impl<T: Pixel> ContextInner<T> {
                 bit_depth,
                 fi.cpu_feature_level,
               );
-              if inter_cost < best_inter_cost {
+              if inter_cost > best_inter_cost {
                 best_inter_cost = inter_cost;
                 best_mv_index = mv_index;
                 best_rec_index = rec_index;
