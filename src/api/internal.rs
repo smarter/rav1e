@@ -848,7 +848,6 @@ impl<T: Pixel> ContextInner<T> {
 
       let bit_depth = self.config.bit_depth;
       let frame_data = &mut self.frame_data;
-      let len = unique_indices.len();
 
       let plane_org = &frame.planes[0];
 
@@ -865,9 +864,56 @@ impl<T: Pixel> ContextInner<T> {
               height: IMPORTANCE_BLOCK_SIZE,
             });
 
+            let mut best_inter_cost = u32::MAX;
+            let mut best_mv_index = 0;
+            let mut best_rec_index = 0;
+
+            unique_indices.iter().for_each(|&(mv_index, rec_index)| {
+              let reference =
+                fi.rec_buffer.frames[rec_index as usize].as_ref().unwrap();
+              let reference_frame = &reference.frame;
+              let reference_output_frameno = reference.output_frameno;
+              let mvs = &fi.lookahead_mvs[mv_index];
+              let mv = mvs[y * 2][x * 2];
+              let plane_ref = &reference_frame.planes[0];
+              assert_ne!(reference_output_frameno, output_frameno);
+
+              // Coordinates of the top-left corner of the reference block, in MV
+              // units.
+              let reference_x =
+                x as i64 * IMP_BLOCK_SIZE_IN_MV_UNITS + mv.col as i64;
+              let reference_y =
+                y as i64 * IMP_BLOCK_SIZE_IN_MV_UNITS + mv.row as i64;
+
+              let region_ref = plane_ref.region(Area::Rect {
+                x: reference_x as isize
+                  / IMP_BLOCK_MV_UNITS_PER_PIXEL as isize,
+                y: reference_y as isize
+                  / IMP_BLOCK_MV_UNITS_PER_PIXEL as isize,
+                width: IMPORTANCE_BLOCK_SIZE,
+                height: IMPORTANCE_BLOCK_SIZE,
+              });
+
+              let inter_cost = get_satd(
+                &region_org,
+                &region_ref,
+                bsize,
+                bit_depth,
+                fi.cpu_feature_level,
+              );
+              if inter_cost < best_inter_cost {
+                best_inter_cost = inter_cost;
+                best_mv_index = mv_index;
+                best_rec_index = rec_index;
+              }
+            });
+
+            let best_unique_indices = [(best_mv_index, best_rec_index)];
+
             // Compute and propagate the importance, split evenly between the
             // referenced frames.
-            unique_indices.iter().for_each(|&(mv_index, rec_index)| {
+            best_unique_indices.iter().for_each(|&(mv_index, rec_index)| {
+
               // Use rec_buffer here rather than lookahead_rec_buffer because
               // rec_buffer still contains the reference frames for the current frame
               // (it's only overwritten when the frame is encoded), while
@@ -923,8 +969,7 @@ impl<T: Pixel> ContextInner<T> {
                 };
 
                 let propagate_amount = (intra_cost + future_importance)
-                  * propagate_fraction
-                  / len as f32;
+                  * propagate_fraction;
 
                 let mut propagate =
                   |block_x_in_mv_units, block_y_in_mv_units, fraction| {
