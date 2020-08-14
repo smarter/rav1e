@@ -864,11 +864,10 @@ impl<T: Pixel> ContextInner<T> {
               height: IMPORTANCE_BLOCK_SIZE,
             });
 
-            let mut best_inter_cost = u32::MAX;
-            let mut best_mv_index = 0;
-            let mut best_rec_index = 0;
 
-            unique_indices.iter().for_each(|&(mv_index, rec_index)| {
+            let mut indices_inter_cost = ArrayVec::<[_; 3]>::new();
+
+            for &(mv_index, rec_index) in unique_indices.iter() {
               let reference =
                 fi.rec_buffer.frames[rec_index as usize].as_ref().unwrap();
               let reference_frame = &reference.frame;
@@ -901,14 +900,15 @@ impl<T: Pixel> ContextInner<T> {
                 bit_depth,
                 fi.cpu_feature_level,
               );
-              if inter_cost < best_inter_cost {
-                best_inter_cost = inter_cost;
-                best_mv_index = mv_index;
-                best_rec_index = rec_index;
-              }
-            });
+              indices_inter_cost.push((inter_cost, mv_index, rec_index));
+            }
 
-            let best_unique_indices = [(best_mv_index, best_rec_index)];
+            // let best_unique_indices = [(best_mv_index, best_rec_index)];
+            indices_inter_cost.sort_by_key(|e| e.0);
+            let best_unique_indices = indices_inter_cost.iter().map(|e| (e.1, e.2)).take(2)
+              .collect::<Vec<_>>();
+
+            let len = best_unique_indices.len();
 
             // Compute and propagate the importance, split evenly between the
             // referenced frames.
@@ -969,7 +969,8 @@ impl<T: Pixel> ContextInner<T> {
                 };
 
                 let propagate_amount = (intra_cost + future_importance)
-                  * propagate_fraction;
+                  * propagate_fraction
+                  / len as f32;
 
                 let mut propagate =
                   |block_x_in_mv_units, block_y_in_mv_units, fraction| {
