@@ -905,14 +905,14 @@ impl<T: Pixel> ContextInner<T> {
 
             // let best_unique_indices = [(best_mv_index, best_rec_index)];
             indices_inter_cost.sort_by_key(|e| e.0);
-            let best_unique_indices = indices_inter_cost.iter().map(|e| (e.1, e.2)).take(2)
-              .collect::<Vec<_>>();
+            let best_unique_indices = indices_inter_cost.iter().take(2).collect::<Vec<_>>();
+            let total_inter_cost: u32 = best_unique_indices.iter().map(|e| e.0).sum();
 
             let len = best_unique_indices.len();
 
             // Compute and propagate the importance, split evenly between the
             // referenced frames.
-            best_unique_indices.iter().for_each(|&(mv_index, rec_index)| {
+            best_unique_indices.iter().for_each(|&(_inter_cost, mv_index, rec_index)| {
 
               // Use rec_buffer here rather than lookahead_rec_buffer because
               // rec_buffer still contains the reference frames for the current frame
@@ -920,10 +920,10 @@ impl<T: Pixel> ContextInner<T> {
               // lookahead_rec_buffer already contains reference frames for the next
               // frame (for the reference propagation to work correctly).
               let reference =
-                fi.rec_buffer.frames[rec_index as usize].as_ref().unwrap();
+                fi.rec_buffer.frames[*rec_index as usize].as_ref().unwrap();
               let reference_frame = &reference.frame;
               let reference_output_frameno = reference.output_frameno;
-              let mvs = &fi.lookahead_mvs[mv_index];
+              let mvs = &fi.lookahead_mvs[*mv_index];
               let mv = mvs[y * 2][x * 2];
               let plane_ref = &reference_frame.planes[0];
 
@@ -968,9 +968,15 @@ impl<T: Pixel> ContextInner<T> {
                   1. - inter_cost / intra_cost
                 };
 
+                let ref_frac = if total_inter_cost == 0 {
+                  1. / len as f32
+                } else {
+                  1. - (inter_cost / total_inter_cost as f32)
+                };
+
                 let propagate_amount = (intra_cost + future_importance)
                   * propagate_fraction
-                  / len as f32;
+                  * ref_frac;
 
                 let mut propagate =
                   |block_x_in_mv_units, block_y_in_mv_units, fraction| {
