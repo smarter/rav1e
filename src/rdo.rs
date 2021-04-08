@@ -12,6 +12,7 @@
 
 use crate::api::*;
 use crate::cdef::*;
+use crate::collect::*;
 use crate::context::*;
 use crate::cpu_features::CpuFeatureLevel;
 use crate::deblock::*;
@@ -33,6 +34,7 @@ use crate::predict::{
   AngleDelta, IntraEdgeFilterParameters, IntraParam, PredictionMode,
   RAV1E_INTER_COMPOUND_MODES, RAV1E_INTER_MODES_MINIMAL, RAV1E_INTRA_MODES,
 };
+use crate::rate::QuantizerParameters;
 use crate::rdo_tables::*;
 use crate::tiling::*;
 use crate::transform::{TxSet, TxSize, TxType, RAV1E_TX_TYPES};
@@ -45,8 +47,11 @@ use crate::{encode_block_post_cdef, encode_block_pre_cdef};
 use crate::partition::PartitionType::*;
 use arrayvec::*;
 use itertools::izip;
+use std::convert::TryInto;
 use std::fmt;
 use std::mem::MaybeUninit;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum RDOType {
@@ -119,6 +124,70 @@ impl Default for PartitionParameters {
       tx_size: TxSize::TX_4X4,
       tx_type: TxType::DCT_DCT,
       sidx: 0,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct RDOTracker {
+  mode_metrics_satd: Box<[[[[oc_mode_metrics; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS-1]>,
+  mode_rd_satd: Box<[[[[oc_mode_rd; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]>,
+  mode_rd_weight_satd: Box<[[[[f64; OC_COMP_BINS]; 2]; 3]; OC_LOGQ_BINS]>
+}
+
+impl RDOTracker {
+  pub fn new() -> RDOTracker {
+    Default::default()
+  }
+  pub fn update(&mut self) {
+    unsafe {
+      oc_mode_metrics_update(
+        self.mode_metrics_satd.as_mut_ptr(), 4, 1,
+        self.mode_rd_satd.as_mut_ptr(), (OC_SATD_SHIFT - 3) as i32, self.mode_rd_weight_satd.as_mut_ptr());
+    }
+  }
+  pub fn merge_in(&mut self, input: &RDOTracker) {
+    // RDOTracker::merge_3d_array(&mut self.rate_bins, &input.rate_bins);
+    // RDOTracker::merge_3d_array(&mut self.rate_counts, &input.rate_counts);
+  }
+  pub fn add_rate(&mut self, qps: QuantizerParameters, pli: usize, is_inter_block: bool, frame_w: usize, frame_h: usize, fast_distortion: u64, rate: u64, satd: u64) {
+    // OC_SATD_SHIFT is what theora does, add "- 3" because our satd is already normalized for 8x8 blocks
+    let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u64 - 1);
+    let frag_bits = rate >> OD_BITRES;
+    if fast_distortion != 0 {
+      let sqrt_ssd = (fast_distortion as f64).sqrt();
+      /*Weight the fragments by the inverse frame size; this prevents HD content
+      from dominating the statistics.*/
+      // let fragw = 1.0/(580.0*100.0);// 1.0/((frame_w*frame_h) as f64);
+      let fragw = 1.0/((frame_w*frame_h) as f64);
+
+      let q = qps.log_target_q >> 47; // Q57 to Q10
+      let mut q_bin = 0;
+      while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin+1][pli][is_inter_block as usize] as i64) > q {
+        q_bin += 1;
+      }
+      // dbg!(q, q_bin, satd, satd_bin, fragw, frag_bits, fast_distortion, sqrt_ssd);
+
+      unsafe {
+        oc_mode_metrics_add(
+          self.mode_metrics_satd[q_bin][pli][is_inter_block as usize]
+            .as_mut_ptr()
+            .offset(satd_bin as isize),
+          fragw,
+          // Normalized for 8x8, compensate for use of OC_SATD_SHIFT in theora code
+          (satd << 3) as libc::c_int,
+          q as libc::c_int,
+          frag_bits.try_into().unwrap(),
+          sqrt_ssd
+        )
+      }
+      // dbg!(self.mode_metrics_satd[q_bin][pli][is_inter_block as usize][satd_bin as usize]);
+    }
+  }
+
+  pub fn dump(&self) {
+    unsafe {
+      oc_mode_metrics_dump(self.mode_metrics_satd.as_ref());
     }
   }
 }
