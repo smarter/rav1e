@@ -694,6 +694,7 @@ pub struct RCState {
 }
 
 // TODO: Separate qi values for each color plane.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct QuantizerParameters {
   // The full-precision, unmodulated log quantizer upon which our modulated
   //  quantizer indices are based.

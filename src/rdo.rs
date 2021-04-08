@@ -136,9 +136,6 @@ pub struct RDOTracker {
 }
 
 impl RDOTracker {
-  pub fn new() -> RDOTracker {
-    Default::default()
-  }
   pub fn update(&mut self) {
     unsafe {
       oc_mode_metrics_update(
@@ -665,7 +662,7 @@ pub struct RawDistortion(u64);
 pub struct Distortion(pub u64);
 
 #[repr(transparent)]
-pub struct ScaledDistortion(u64);
+pub struct ScaledDistortion(pub u64);
 
 impl DistortionScale {
   /// Bits past the radix point

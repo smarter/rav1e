@@ -657,7 +657,7 @@ impl<T: Pixel> ContextInner<T> {
     fi.rec_buffer = fi.lookahead_rec_buffer.clone();
 
     // Estimate lambda with rate-control dry-run
-    fi.set_quantizers(&qps);
+    fi.set_quantizers(qps);
 
     // TODO: as in the encoding code, key frames will have no references.
     // However, for block importance purposes we want key frames to act as
@@ -1148,7 +1148,7 @@ impl<T: Pixel> ContextInner<T> {
         fti,
         self.maybe_prev_log_base_q,
       );
-      frame_data.fi.set_quantizers(&qps);
+      frame_data.fi.set_quantizers(qps);
 
       if self.config.tune == Tune::Psychovisual {
         let frame =
@@ -1181,7 +1181,7 @@ impl<T: Pixel> ContextInner<T> {
           fti,
           self.maybe_prev_log_base_q,
         );
-        frame_data.fi.set_quantizers(&qps);
+        frame_data.fi.set_quantizers(qps);
       }
 
       let data =
