@@ -170,15 +170,16 @@ impl SpeedSettings {
   /// This preset is set this way because 8x8 with reduced TX set is faster but with equivalent
   /// or better quality compared to 16x16 (to which reduced TX set does not apply).
   fn partition_range_preset(speed: usize) -> PartitionRange {
-    if speed <= 2 {
-      PartitionRange::new(BlockSize::BLOCK_4X4, BlockSize::BLOCK_64X64)
-    } else if speed <= 8 {
-      PartitionRange::new(BlockSize::BLOCK_8X8, BlockSize::BLOCK_64X64)
-    } else if speed <= 9 {
-      PartitionRange::new(BlockSize::BLOCK_32X32, BlockSize::BLOCK_64X64)
-    } else {
-      PartitionRange::new(BlockSize::BLOCK_32X32, BlockSize::BLOCK_32X32)
-    }
+    PartitionRange::new(BlockSize::BLOCK_8X8, BlockSize::BLOCK_64X64)
+    // if speed <= 2 {
+    //   PartitionRange::new(BlockSize::BLOCK_4X4, BlockSize::BLOCK_64X64)
+    // } else if speed <= 8 {
+    //   PartitionRange::new(BlockSize::BLOCK_8X8, BlockSize::BLOCK_64X64)
+    // } else if speed <= 9 {
+    //   PartitionRange::new(BlockSize::BLOCK_32X32, BlockSize::BLOCK_64X64)
+    // } else {
+    //   PartitionRange::new(BlockSize::BLOCK_32X32, BlockSize::BLOCK_32X32)
+    // }
   }
 
   /// Multiref is enabled automatically if low_latency is false.
@@ -223,7 +224,8 @@ impl SpeedSettings {
   }
 
   const fn rdo_tx_decision_preset(speed: usize) -> bool {
-    speed <= 5
+    false
+    // speed <= 5
   }
 
   fn prediction_modes_preset(speed: usize) -> PredictionModesSetting {
