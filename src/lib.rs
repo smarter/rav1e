@@ -34,6 +34,7 @@
 //! [`Context`]: struct.Context.html
 //! [`Context::receive_packet`]: struct.Context.html#method.receive_packet
 
+#![feature(extern_types)]
 #![deny(bare_trait_objects)]
 #![allow(clippy::cast_lossless)]
 #![allow(clippy::cast_ptr_alignment)]
@@ -208,6 +209,7 @@ mod cpu_features;
 
 mod activity;
 pub(crate) mod asm;
+mod collect;
 mod dist;
 mod ec;
 mod partition;

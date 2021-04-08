@@ -123,20 +123,6 @@ impl Default for PartitionParameters {
   }
 }
 
-pub fn estimate_rate(qindex: u8, ts: TxSize, fast_distortion: u64) -> u64 {
-  let bs_index = ts as usize;
-  let q_bin_idx = (qindex as usize) / RDO_QUANT_DIV;
-  let bin_idx_down =
-    ((fast_distortion) / RATE_EST_BIN_SIZE).min((RDO_NUM_BINS - 2) as u64);
-  let bin_idx_up = (bin_idx_down + 1).min((RDO_NUM_BINS - 1) as u64);
-  let x0 = (bin_idx_down * RATE_EST_BIN_SIZE) as i64;
-  let x1 = (bin_idx_up * RATE_EST_BIN_SIZE) as i64;
-  let y0 = RDO_RATE_TABLE[q_bin_idx][bs_index][bin_idx_down as usize] as i64;
-  let y1 = RDO_RATE_TABLE[q_bin_idx][bs_index][bin_idx_up as usize] as i64;
-  let slope = ((y1 - y0) << 8) / (x1 - x0);
-  (y0 + (((fast_distortion as i64 - x0) * slope) >> 8)).max(0) as u64
-}
-
 // The microbenchmarks perform better with inlining turned off
 #[inline(never)]
 fn cdef_dist_wxh_8x8<T: Pixel>(
@@ -2577,9 +2563,4 @@ pub fn rdo_loop_decision<T: Pixel, W: Writer>(
       }
     }
   }
-}
-
-#[test]
-fn estimate_rate_test() {
-  assert_eq!(estimate_rate(0, TxSize::TX_4X4, 0), RDO_RATE_TABLE[0][0][0]);
 }
