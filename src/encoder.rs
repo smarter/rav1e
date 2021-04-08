@@ -1317,9 +1317,10 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
 
       if rdo_type == RDOType::TxDistEstRate {
         // look up rate and distortion in table
-        let estimated_rate =
-          estimate_rate(fi.base_q_idx, tx_size, raw_tx_dist);
-        w.add_bits_frac(estimated_rate as u32);
+        // let estimated_rate =
+        //   estimate_rate(fi.base_q_idx, tx_size, raw_tx_dist);
+        // w.add_bits_frac(estimated_rate as u32);
+        panic!("XX");
       }
 
       let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
