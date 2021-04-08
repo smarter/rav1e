@@ -12,6 +12,7 @@ use crate::api::*;
 use crate::cdef::*;
 use crate::context::*;
 use crate::deblock::*;
+use crate::dist::get_satd;
 use crate::ec::*;
 use crate::frame::*;
 use crate::header::*;
@@ -29,6 +30,7 @@ use crate::rate::{
   bexp64, q57, QuantizerParameters, FRAME_SUBTYPE_I, FRAME_SUBTYPE_P, QSCALE,
 };
 use crate::rdo::*;
+use crate::rdo_tables::*;
 use crate::segmentation::*;
 use crate::serialize::{Deserialize, Serialize};
 use crate::stats::EncoderStats;
@@ -41,6 +43,7 @@ use arg_enum_proc_macro::ArgEnum;
 use arrayvec::*;
 use bitstream_io::{BigEndian, BitWrite, BitWriter};
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::mem::MaybeUninit;
@@ -49,6 +52,8 @@ use std::{fmt, io, mem};
 
 use crate::rayon::iter::*;
 use rust_hawktracer::*;
+
+thread_local!(static RDOTRACKER: RefCell<RDOTracker> = RefCell::new(Default::default()));
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
@@ -566,6 +571,12 @@ pub struct FrameInvariants<T: Pixel> {
   pub ref_frames: [u8; INTER_REFS_PER_FRAME],
   pub ref_frame_sign_bias: [bool; INTER_REFS_PER_FRAME],
   pub rec_buffer: ReferenceFramesSet<T>,
+
+  // FIXME: Note that qps.lambda is not scaled by the bitdepth, unlike
+  // lambda below, it'd be less confusing if qps.lambda was scaled and we
+  // could drop the other one.
+  qps: QuantizerParameters,  
+
   pub base_q_idx: u8,
   pub dc_delta_q: [i8; 3],
   pub ac_delta_q: [i8; 3],
@@ -721,6 +732,7 @@ impl<T: Pixel> FrameInvariants<T> {
       ref_frames: [0; INTER_REFS_PER_FRAME],
       ref_frame_sign_bias: [false; INTER_REFS_PER_FRAME],
       rec_buffer: ReferenceFramesSet::new(),
+      qps: Default::default(),
       base_q_idx: config.quantizer as u8,
       dc_delta_q: [0; 3],
       ac_delta_q: [0; 3],
@@ -939,7 +951,7 @@ impl<T: Pixel> FrameInvariants<T> {
     }
   }
 
-  fn pick_strength_from_q(&mut self, qps: &QuantizerParameters) {
+  fn pick_strength_from_q(&mut self, qps: QuantizerParameters) {
     self.cdef_damping = 3 + (self.base_q_idx >> 6);
     let q = bexp64(qps.log_target_q as i64 + q57(QSCALE)) as f32;
     /* These coefficients were trained on libaom. */
@@ -963,7 +975,8 @@ impl<T: Pixel> FrameInvariants<T> {
       (uv_f1 * CDEF_SEC_STRENGTHS as i32 + uv_f2) as u8;
   }
 
-  pub fn set_quantizers(&mut self, qps: &QuantizerParameters) {
+  pub fn set_quantizers(&mut self, qps: QuantizerParameters) {
+    self.qps = qps;
     self.base_q_idx = qps.ac_qi[0];
     let base_q_idx = self.base_q_idx as i32;
     for pi in 0..3 {
@@ -1180,6 +1193,57 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
     return (false, ScaledDistortion::zero());
   }
 
+  // TODO: is the prediction available at this point for inter ?
+  // TODO: only needed when train_rdo is true
+  let satd = get_satd(
+    &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+    tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
+
+  /*
+  if !need_recon_pixel && tx_size.width() == 8 && tx_size.height() == 8 && p == 0 {
+    let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u32 - 2);
+    let q = fi.qps.log_target_q >> 47;
+    let mut q_bin = 0;
+    let is_inter_block = !mode.is_intra();
+    while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize] as i64) > q {
+      q_bin += 1;
+    }
+    let dx: i64 = OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] as i64 - q;
+    let mut dq: i64 = (OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] - OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize]).into();
+    if dq == 0 { dq = 1 };
+    // dbg!(q, q_bin, satd, cost_coeffs >> OD_BITRES, (tx_dist as f64).sqrt());
+
+    let [r00, d00] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][satd_bin as usize];
+    let [r01, d01] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][satd_bin as usize];
+    // dbg!(r00, d00);
+    // dbg!(r01, d01);
+    // dbg!(dx,dq);
+    // let r_est = (r0 as i64 + (((r1-r0) as i64)*dx+(dq >> 1))/dq) as i16;
+    // let d_est = (d0 as i64 + (((d1-d0) as i64)*dx+(dq >> 1))/dq) as i16;
+    let r0 = (r00 as f64 + (((r01-r00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    let d0 = (d00 as f64 + (((d01-d00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    // dbg!(r0, d0);
+
+    let [r10, d10] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][(satd_bin+1) as usize];
+    let [r11, d11] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][(satd_bin+1) as usize];
+    // dbg!(r10, d10);
+    // dbg!(r11, d11);
+    let r1 = (r10 as f64 + (((r11-r10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    let d1 = (d10 as f64 + (((d11-d10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    // dbg!(r1, d1);
+
+    let dy: i64 = satd as i64 - ((satd_bin as i64) << (OC_SATD_SHIFT - 3));
+    let ds: i64 = 1 << (OC_SATD_SHIFT - 3);
+
+    let r = (r0 + ((r1-r0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)) as u32;
+    let d = (d0 + ((d1-d0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)).powf(2.0) as i64;
+    // dbg!(dy,ds);
+    // dbg!(r, d);
+
+    w.add_bits_frac(r << OD_BITRES);
+    return (true, d); // no idea what has_coeff is used for really.
+  }*/
+
   let coded_tx_area = av1_get_coded_tx_size(tx_size).area();
   let mut residual_storage: Aligned<[i16; 64 * 64]> = Aligned::uninitialized();
   let mut coeffs_storage: Aligned<[T::Coeff; 64 * 64]> =
@@ -1230,6 +1294,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
 
   let eob = ts.qc.quantize(coeffs, qcoeffs, tx_size, tx_type);
 
+  let cost_before_coeffs = w.tell_frac();
   let has_coeff = if need_recon_pixel || rdo_type.needs_coeff_rate() {
     debug_assert!((((fi.w_in_b - frame_bo.0.x) << MI_SIZE_LOG2) >> xdec) >= 4);
     debug_assert!((((fi.h_in_b - frame_bo.0.y) << MI_SIZE_LOG2) >> ydec) >= 4);
@@ -1259,6 +1324,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
   } else {
     true
   };
+  let cost_coeffs = w.tell_frac() - cost_before_coeffs;
 
   // Reconstruct
   dequantize(
@@ -1324,7 +1390,19 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
       }
 
       let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
-      RawDistortion::new(raw_tx_dist) * bias * fi.dist_scale[p]
+      let dist = RawDistortion::new(raw_tx_dist) * bias * fi.dist_scale[p];
+
+      if has_coeff {
+        assert!(cost_coeffs > 0);
+
+        RDOTRACKER.with(|rdotracker_cell| {
+          rdotracker_cell.borrow_mut().add_rate(
+            fi.qps, p, !mode.is_intra(), fi.width, fi.height,
+            dist.0, cost_coeffs as u64, satd.into());
+        })
+      }
+
+      dist
     } else {
       ScaledDistortion::zero()
     };
@@ -3052,6 +3130,10 @@ fn encode_tile_group<T: Pixel>(
       cdef_filter_tile(fi, &deblocked_frame, &blocks.as_tile_blocks(), rec);
     }
   }
+
+  RDOTRACKER.with(|rdotracker_cell| {
+    rdotracker_cell.borrow_mut().dump();
+  });
 
   let (idx_max, max_len) = raw_tiles
     .iter()
