@@ -1193,57 +1193,6 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
     return (false, ScaledDistortion::zero());
   }
 
-  // TODO: is the prediction available at this point for inter ?
-  // TODO: only needed when train_rdo is true
-  let satd = get_satd(
-    &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-    tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
-
-  /*
-  if !need_recon_pixel && tx_size.width() == 8 && tx_size.height() == 8 && p == 0 {
-    let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u32 - 2);
-    let q = fi.qps.log_target_q >> 47;
-    let mut q_bin = 0;
-    let is_inter_block = !mode.is_intra();
-    while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize] as i64) > q {
-      q_bin += 1;
-    }
-    let dx: i64 = OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] as i64 - q;
-    let mut dq: i64 = (OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] - OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize]).into();
-    if dq == 0 { dq = 1 };
-    // dbg!(q, q_bin, satd, cost_coeffs >> OD_BITRES, (tx_dist as f64).sqrt());
-
-    let [r00, d00] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][satd_bin as usize];
-    let [r01, d01] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][satd_bin as usize];
-    // dbg!(r00, d00);
-    // dbg!(r01, d01);
-    // dbg!(dx,dq);
-    // let r_est = (r0 as i64 + (((r1-r0) as i64)*dx+(dq >> 1))/dq) as i16;
-    // let d_est = (d0 as i64 + (((d1-d0) as i64)*dx+(dq >> 1))/dq) as i16;
-    let r0 = (r00 as f64 + (((r01-r00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    let d0 = (d00 as f64 + (((d01-d00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    // dbg!(r0, d0);
-
-    let [r10, d10] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][(satd_bin+1) as usize];
-    let [r11, d11] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][(satd_bin+1) as usize];
-    // dbg!(r10, d10);
-    // dbg!(r11, d11);
-    let r1 = (r10 as f64 + (((r11-r10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    let d1 = (d10 as f64 + (((d11-d10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    // dbg!(r1, d1);
-
-    let dy: i64 = satd as i64 - ((satd_bin as i64) << (OC_SATD_SHIFT - 3));
-    let ds: i64 = 1 << (OC_SATD_SHIFT - 3);
-
-    let r = (r0 + ((r1-r0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)) as u32;
-    let d = (d0 + ((d1-d0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)).powf(2.0) as i64;
-    // dbg!(dy,ds);
-    // dbg!(r, d);
-
-    w.add_bits_frac(r << OD_BITRES);
-    return (true, d); // no idea what has_coeff is used for really.
-  }*/
-
   let coded_tx_area = av1_get_coded_tx_size(tx_size).area();
   let mut residual_storage: Aligned<[i16; 64 * 64]> = Aligned::uninitialized();
   let mut coeffs_storage: Aligned<[T::Coeff; 64 * 64]> =
@@ -1281,6 +1230,64 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
   for a in residual[visible_area..].iter_mut() {
     *a = 0;
   }
+
+  // TODO: is the prediction available at this point for inter ?
+  // TODO: only needed when train_rdo is true
+  let satd = get_satd(
+    &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+    tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
+
+  if !need_recon_pixel && tx_size.width() == 8 && tx_size.height() == 8 && visible_tx_w == 8 && visible_tx_h == 8 /*&& p == 0*/ {
+    let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u32 - 2);
+    let q = fi.qps.log_target_q >> 47;
+    let mut q_bin = 0;
+    let is_inter_block = !mode.is_intra();
+    while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize] as i64) > q {
+      q_bin += 1;
+    }
+    let dx: i64 = OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] as i64 - q;
+    let mut dq: i64 = (OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] - OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize]).into();
+    if dq == 0 { dq = 1 };
+    // dbg!(q, q_bin, satd, cost_coeffs >> OD_BITRES, (tx_dist as f64).sqrt());
+
+    let [r00, d00] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][satd_bin as usize];
+    let [r01, d01] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][satd_bin as usize];
+    // dbg!(r00, d00);
+    // dbg!(r01, d01);
+    // dbg!(dx,dq);
+    // let r_est = (r0 as i64 + (((r1-r0) as i64)*dx+(dq >> 1))/dq) as i16;
+    // let d_est = (d0 as i64 + (((d1-d0) as i64)*dx+(dq >> 1))/dq) as i16;
+    let r0 = (r00 as f64 + (((r01-r00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    let d0 = (d00 as f64 + (((d01-d00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    // dbg!(r0, d0);
+
+    let [r10, d10] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][(satd_bin+1) as usize];
+    let [r11, d11] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][(satd_bin+1) as usize];
+    // dbg!(r10, d10);
+    // dbg!(r11, d11);
+    let r1 = (r10 as f64 + (((r11-r10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    let d1 = (d10 as f64 + (((d11-d10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+    // dbg!(r1, d1);
+
+    let dy: i64 = satd as i64 - ((satd_bin as i64) << (OC_SATD_SHIFT - 3));
+    let ds: i64 = 1 << (OC_SATD_SHIFT - 3);
+
+    let mut r = (r0 + ((r1-r0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)) as i32;
+    let mut d = (d0 + ((d1-d0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)).powf(2.0) as i64;
+    // dbg!(dy,ds);
+    // dbg!(r, d);
+
+    if r < 0 { r = 0; }
+    if d < 0 { d = 0; }
+
+    w.add_bits_frac((r as u32) << OD_BITRES);
+
+    let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
+    let dist = RawDistortion::new(d as u64) * bias * fi.dist_scale[p];
+
+    return (true, dist); // no idea what has_coeff is used for really.
+  }
+
 
   forward_transform(
     residual,
@@ -1395,11 +1402,11 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
       if has_coeff {
         assert!(cost_coeffs > 0);
 
-        RDOTRACKER.with(|rdotracker_cell| {
-          rdotracker_cell.borrow_mut().add_rate(
-            fi.qps, p, !mode.is_intra(), fi.width, fi.height,
-            raw_tx_dist, cost_coeffs as u64, satd.into());
-        })
+        // RDOTRACKER.with(|rdotracker_cell| {
+        //   rdotracker_cell.borrow_mut().add_rate(
+        //     fi.qps, p, !mode.is_intra(), fi.width, fi.height,
+        //     raw_tx_dist, cost_coeffs as u64, satd.into());
+        // })
       }
 
       dist
@@ -3131,9 +3138,9 @@ fn encode_tile_group<T: Pixel>(
     }
   }
 
-  RDOTRACKER.with(|rdotracker_cell| {
-    rdotracker_cell.borrow_mut().dump();
-  });
+  // RDOTRACKER.with(|rdotracker_cell| {
+  //   rdotracker_cell.borrow_mut().dump();
+  // });
 
   let (idx_max, max_len) = raw_tiles
     .iter()
