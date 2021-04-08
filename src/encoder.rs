@@ -1398,7 +1398,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
         RDOTRACKER.with(|rdotracker_cell| {
           rdotracker_cell.borrow_mut().add_rate(
             fi.qps, p, !mode.is_intra(), fi.width, fi.height,
-            dist.0, cost_coeffs as u64, satd.into());
+            raw_tx_dist, cost_coeffs as u64, satd.into());
         })
       }
 
