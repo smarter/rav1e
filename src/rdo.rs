@@ -662,7 +662,7 @@ pub struct RawDistortion(u64);
 pub struct Distortion(pub u64);
 
 #[repr(transparent)]
-pub struct ScaledDistortion(pub u64);
+pub struct ScaledDistortion(u64);
 
 impl DistortionScale {
   /// Bits past the radix point
