@@ -47,13 +47,14 @@ use crate::{encode_block_post_cdef, encode_block_pre_cdef};
 use crate::partition::PartitionType::*;
 use arrayvec::*;
 use itertools::izip;
+use std::cmp::*;
 use std::convert::TryInto;
 use std::fmt;
 use std::mem::MaybeUninit;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum RDOType {
   PixelDistRealRate,
   TxDistRealRate,
@@ -84,14 +85,14 @@ impl RDOType {
 
 #[derive(Clone)]
 pub struct PartitionGroupParameters {
-  pub rd_cost: f64,
+  pub rd_cost: RDCost,
   pub part_type: PartitionType,
   pub part_modes: ArrayVec<PartitionParameters, 4>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PartitionParameters {
-  pub rd_cost: f64,
+  pub rd_cost: RDCost,
   pub bo: TileBlockOffset,
   pub bsize: BlockSize,
   pub pred_mode_luma: PredictionMode,
@@ -110,7 +111,7 @@ pub struct PartitionParameters {
 impl Default for PartitionParameters {
   fn default() -> Self {
     PartitionParameters {
-      rd_cost: std::f64::MAX,
+      rd_cost: RDCOST_MAX,
       bo: TileBlockOffset::default(),
       bsize: BlockSize::BLOCK_INVALID,
       pred_mode_luma: PredictionMode::default(),
@@ -661,8 +662,12 @@ pub struct RawDistortion(u64);
 #[repr(transparent)]
 pub struct Distortion(pub u64);
 
-#[repr(transparent)]
-pub struct ScaledDistortion(u64);
+// #[repr(transparent)]
+#[derive(Copy, Clone, Debug)]
+pub struct ScaledDistortion {
+  dist: u64,
+  estimated: Estimation
+}
 
 impl DistortionScale {
   /// Bits past the radix point
@@ -730,11 +735,33 @@ impl Distortion {
   }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum Estimation {
+  Wildcard,
+  Estimated,
+  Real
+}
+
+use Estimation::*;
+
+impl PartialEq for Estimation {
+  fn eq(&self, other: &Self) -> bool {
+    match (self, other) {
+      (Wildcard, _) => true,
+      (_, Wildcard) => true,
+      (Estimated, Estimated) => true,
+      (Real, Real) => true,
+      _ => false
+    }
+  }
+}
+impl Eq for Estimation {}
+
 impl std::ops::Mul<f64> for Distortion {
   type Output = ScaledDistortion;
   #[inline]
   fn mul(self, rhs: f64) -> ScaledDistortion {
-    ScaledDistortion((self.0 as f64 * rhs) as u64)
+    ScaledDistortion { dist: (self.0 as f64 * rhs) as u64, estimated: Estimation::Real }
   }
 }
 
@@ -748,22 +775,101 @@ impl std::ops::AddAssign for Distortion {
 impl ScaledDistortion {
   #[inline]
   pub const fn zero() -> Self {
-    Self(0)
+    Self { dist: 0, estimated: Estimation::Real }
+  }
+
+  pub const fn zeroWildcard() -> Self {
+    Self { dist: 0, estimated: Estimation::Wildcard }
+  }
+
+  pub fn to_estimated(&self) -> Self {
+    Self { dist: self.dist, estimated: Estimation::Estimated }
   }
 }
 
 impl std::ops::AddAssign for ScaledDistortion {
-  #[inline]
   fn add_assign(&mut self, other: Self) {
-    self.0 += other.0;
+    if self.dist != 0 && other.dist != 0 {
+      assert!(self.estimated == other.estimated, "self: {:?}, other: {:?}", self, other);
+    }
+    self.dist += other.dist;
+    if self.estimated == Wildcard {
+      self.estimated = other.estimated;
+    }
+  }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct RDCost {
+  pub cost: f64,
+  pub estimated: Estimation
+}
+
+pub const RDCOST_MAX: RDCost = RDCost { cost: std::f64::MAX, estimated: Estimation::Wildcard };
+
+impl RDCost {
+  pub fn zero() -> Self {
+    RDCost { cost: 0.0, estimated: Estimation::Wildcard }
+  }
+}
+
+impl PartialEq for RDCost {
+  fn eq(&self, other: &Self) -> bool {
+    assert!(self.estimated == other.estimated, "self: {:?}, other: {:?}", self, other);
+    self.cost == other.cost
+  }
+}
+impl Eq for RDCost {}
+
+impl PartialOrd for RDCost {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    assert!(self.estimated == other.estimated, "self: {:?}, other: {:?}", self, other);
+    Some(
+      if self.cost == other.cost {
+        Ordering::Equal
+      } else if self.cost < other.cost {
+        Ordering::Less
+      } else {
+        Ordering::Greater
+      }
+    )
+  }
+}
+
+impl std::ops::Add for RDCost {
+  type Output = Self;
+
+  fn add(self, other: Self) -> Self {
+    if self.cost != 0.0 && other.cost != 0.0 {
+      assert!(self.estimated == other.estimated, "self: {:?}, other: {:?}", self, other);
+    }
+    RDCost {
+      cost: self.cost + other.cost,
+      estimated: if self.estimated == Wildcard { other.estimated } else { self.estimated }
+    }
+  }
+}
+
+impl std::ops::AddAssign for RDCost {
+  fn add_assign(&mut self, other: Self) {
+    if self.cost != 0.0 && other.cost != 0.0 {
+      assert!(self.estimated == other.estimated, "self: {:?}, other: {:?}", self, other);
+    }
+    self.cost += other.cost;
+    if self.estimated == Wildcard {
+      self.estimated = other.estimated;
+    }
   }
 }
 
 pub fn compute_rd_cost<T: Pixel>(
   fi: &FrameInvariants<T>, rate: u32, distortion: ScaledDistortion,
-) -> f64 {
+) -> RDCost {
   let rate_in_bits = (rate as f64) / ((1 << OD_BITRES) as f64);
-  distortion.0 as f64 + fi.lambda * rate_in_bits
+  RDCost {
+    cost: distortion.dist as f64 + fi.lambda * rate_in_bits,
+    estimated: distortion.estimated
+  }
 }
 
 pub fn rdo_tx_size_type<T: Pixel>(
@@ -781,7 +887,7 @@ pub fn rdo_tx_size_type<T: Pixel>(
 
   let mut best_tx_type = TxType::DCT_DCT;
   let mut best_tx_size = tx_size;
-  let mut best_rd = std::f64::MAX;
+  let mut best_rd = RDCOST_MAX;
 
   let do_rdo_tx_size =
     fi.tx_mode_select && fi.config.speed_settings.rdo_tx_decision && !is_inter;
@@ -960,7 +1066,7 @@ fn luma_chroma_mode_rdo<T: Pixel>(
         } else {
           compute_distortion(fi, ts, bsize, is_chroma_block, tile_bo, false)
         };
-        let is_zero_dist = distortion.0 == 0;
+        let is_zero_dist = distortion.dist == 0;
         let rd = compute_rd_cost(fi, rate, distortion);
         if rd < best.rd_cost {
           //if rd < best.rd_cost || luma_mode == PredictionMode::NEW_NEWMV {
@@ -1132,7 +1238,7 @@ pub fn rdo_mode_decision<T: Pixel>(
   cw.bc.blocks.set_ref_frames(tile_bo, bsize, best.ref_frames);
   cw.bc.blocks.set_motion_vectors(tile_bo, bsize, best.mvs);
 
-  assert!(best.rd_cost >= 0_f64);
+  assert!(best.rd_cost.cost >= 0_f64);
 
   PartitionParameters {
     bo: tile_bo,
@@ -1710,9 +1816,9 @@ pub fn rdo_tx_type_decision<T: Pixel>(
   mode: PredictionMode, ref_frames: [RefType; 2], mvs: [MotionVector; 2],
   bsize: BlockSize, tile_bo: TileBlockOffset, tx_size: TxSize, tx_set: TxSet,
   tx_types: &[TxType],
-) -> (TxType, f64) {
+) -> (TxType, RDCost) {
   let mut best_type = TxType::DCT_DCT;
-  let mut best_rd = std::f64::MAX;
+  let mut best_rd = RDCOST_MAX;
 
   let PlaneConfig { xdec, ydec, .. } = ts.input.planes[1].cfg;
   let is_chroma_block =
@@ -1810,7 +1916,7 @@ pub fn rdo_tx_type_decision<T: Pixel>(
     cw.rollback(cw_checkpoint.as_ref().unwrap());
   }
 
-  assert!(best_rd >= 0_f64);
+  assert!(best_rd.cost >= 0_f64);
 
   (best_type, best_rd)
 }
@@ -1843,7 +1949,7 @@ fn rdo_partition_none<T: Pixel>(
   fi: &FrameInvariants<T>, ts: &mut TileStateMut<'_, T>,
   cw: &mut ContextWriter, bsize: BlockSize, tile_bo: TileBlockOffset,
   inter_cfg: &InterConfig, child_modes: &mut ArrayVec<PartitionParameters, 4>,
-) -> f64 {
+) -> RDCost {
   debug_assert!(tile_bo.0.x < ts.mi_width && tile_bo.0.y < ts.mi_height);
 
   let mode = rdo_mode_decision(fi, ts, cw, bsize, tile_bo, inter_cfg);
@@ -1860,9 +1966,9 @@ fn rdo_partition_simple<T: Pixel, W: Writer>(
   fi: &FrameInvariants<T>, ts: &mut TileStateMut<'_, T>,
   cw: &mut ContextWriter, w_pre_cdef: &mut W, w_post_cdef: &mut W,
   bsize: BlockSize, tile_bo: TileBlockOffset, inter_cfg: &InterConfig,
-  partition: PartitionType, rdo_type: RDOType, best_rd: f64,
+  partition: PartitionType, rdo_type: RDOType, best_rd: RDCost,
   child_modes: &mut ArrayVec<PartitionParameters, 4>,
-) -> Option<f64> {
+) -> Option<RDCost> {
   debug_assert!(tile_bo.0.x < ts.mi_width && tile_bo.0.y < ts.mi_height);
   let subsize = bsize.subsize(partition);
 
@@ -1874,7 +1980,7 @@ fn rdo_partition_simple<T: Pixel, W: Writer>(
     cw.write_partition(w, tile_bo, partition, bsize);
     compute_rd_cost(fi, w.tell_frac() - tell, ScaledDistortion::zero())
   } else {
-    0.0
+    RDCost::zero()
   };
 
   let hbsw = subsize.width_mi(); // Half the block size width in blocks
@@ -1897,7 +2003,7 @@ fn rdo_partition_simple<T: Pixel, W: Writer>(
 
   let partitions = get_sub_partitions(&four_partitions, partition);
 
-  let mut rd_cost_sum = 0.0;
+  let mut rd_cost_sum = RDCost::zero();
 
   for offset in partitions {
     let hbs = subsize.width_mi() >> 1;
@@ -1932,7 +2038,7 @@ fn rdo_partition_simple<T: Pixel, W: Writer>(
       );
       child_modes.push(mode_decision);
     } else {
-      //rd_cost_sum += std::f64::MAX;
+      //rd_cost_sum += RDCOST_MAX;
       return None;
     }
   }
@@ -2009,7 +2115,7 @@ pub fn rdo_partition_decision<T: Pixel, W: Writer>(
     w_post_cdef.rollback(&w_post_checkpoint);
   }
 
-  assert!(best_rd >= 0_f64);
+  assert!(best_rd.cost >= 0_f64);
 
   PartitionGroupParameters {
     rd_cost: best_rd,
@@ -2419,8 +2525,9 @@ pub fn rdo_loop_decision<T: Pixel, W: Writer>(
             }
 
             let cost = compute_rd_cost(fi, rate, err);
-            if best_cost < 0. || cost < best_cost {
-              best_cost = cost;
+            assert!(cost.estimated != Estimated);
+            if best_cost < 0. || cost.cost < best_cost {
+              best_cost = cost.cost;
               best_new_index = cdef_index as i8;
             }
           }
@@ -2523,10 +2630,11 @@ pub fn rdo_loop_decision<T: Pixel, W: Writer>(
                 );
 
                 let cost = compute_rd_cost(fi, rate, err);
+                assert!(cost.estimated != Estimated);
                 // Was this choice actually an improvement?
-                if best_cost < 0. || cost < best_cost {
-                  best_cost = cost;
-                  best_lrf_cost[lru_y * lru_w[pli] + lru_x][pli] = cost;
+                if best_cost < 0. || cost.cost < best_cost {
+                  best_cost = cost.cost;
+                  best_lrf_cost[lru_y * lru_w[pli] + lru_x][pli] = cost.cost;
                   best_new_lrf = RestorationFilter::None;
                 }
               }
@@ -2605,9 +2713,10 @@ pub fn rdo_loop_decision<T: Pixel, W: Writer>(
                   pli,
                 );
                 let cost = compute_rd_cost(fi, rate, err);
-                if cost < best_cost {
-                  best_cost = cost;
-                  best_lrf_cost[lru_y * lru_w[pli] + lru_x][pli] = cost;
+                assert!(cost.estimated != Estimated);
+                if cost.cost < best_cost {
+                  best_cost = cost.cost;
+                  best_lrf_cost[lru_y * lru_w[pli] + lru_x][pli] = cost.cost;
                   best_new_lrf = current_lrf;
                 }
               }
