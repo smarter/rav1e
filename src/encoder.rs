@@ -1279,11 +1279,12 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
 
   // TODO: is the prediction available at this point for inter ?
   // TODO: only needed when train_rdo is true
-  let satd = get_satd(
-    &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-    tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
+  // let satd = get_satd(
+  //   &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+  //   tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
 
-  if false && !need_recon_pixel && tx_size.width() >= 8 && tx_size.width() <= 16 && tx_size.height() >= 8 && tx_size.height() <= 16 && visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height() /*&& p == 0*/ {
+  if !need_recon_pixel && tx_size.width() >= 8 && tx_size.width() <= 16 && tx_size.height() >= 8 && tx_size.height() <= 16 && visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height() /*&& p == 0*/ {
+
     let mut d: u64 = 0;
     let OC_MODE_BLOCK_SIZE = 8;
     let blocks_h = tx_size.height() as isize / OC_MODE_BLOCK_SIZE;
@@ -1418,13 +1419,13 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
       let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
       let dist = RawDistortion::new(raw_tx_dist) * bias * fi.dist_scale[p];
 
-      if has_coeff && visible_tx_w == 16 && visible_tx_h == 16 {
-        RDOTRACKER.with(|rdotracker_cell| {
-          rdotracker_cell.borrow_mut().add_rate(
-            fi.qps, p, !mode.is_intra(), fi.width, fi.height,
-            raw_tx_dist, cost_coeffs as u64, (satd / 4).into());
-        })
-      }
+      // if has_coeff && visible_tx_w == 16 && visible_tx_h == 16 {
+      //   RDOTRACKER.with(|rdotracker_cell| {
+      //     rdotracker_cell.borrow_mut().add_rate(
+      //       fi.qps, p, !mode.is_intra(), fi.width, fi.height,
+      //       raw_tx_dist, cost_coeffs as u64, (satd / 4).into());
+      //   })
+      // }
 
       dist
     } else {
@@ -3155,9 +3156,9 @@ fn encode_tile_group<T: Pixel>(
     }
   }
 
-  RDOTRACKER.with(|rdotracker_cell| {
-    rdotracker_cell.borrow_mut().dump();
-  });
+  // RDOTRACKER.with(|rdotracker_cell| {
+  //   rdotracker_cell.borrow_mut().dump();
+  // });
 
   let (idx_max, max_len) = raw_tiles
     .iter()
