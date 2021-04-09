@@ -1285,20 +1285,20 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
   //   &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
   //   tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
 
-  if !need_recon_pixel && tx_size.width() <= 16 && tx_size.height() <= 16 && tx_size.width() == tx_size.height() && visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height() /*&& p == 0*/ {
+  if !need_recon_pixel /*&& tx_size.width() <= 16 && tx_size.height() <= 16 && tx_size.width() == tx_size.height() && visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height()*/ /*&& p == 0*/ {
 
     let mut d: u64 = 0;
 
     // Table entries are 8x8 for luma, 4x4 for chroma
-    let OC_MODE_BLOCK_SIZE = if p != 0 { 8 } else { 4 };
-    let blocks_h = tx_size.height() as isize / OC_MODE_BLOCK_SIZE;
-    let blocks_w = tx_size.width() as isize / OC_MODE_BLOCK_SIZE;
+    let mode_bsize = if p == 0 { BlockSize::BLOCK_8X8 } else { BlockSize::BLOCK_4X4 };
+    let blocks_h = (visible_tx_h / mode_bsize.width()) as isize;
+    let blocks_w = (visible_tx_w / mode_bsize.width()) as isize;
     for by in 0..blocks_h {
       for bx in 0..blocks_w {
         let sub_area = Area::BlockStartingAt { bo: tx_bo.with_offset(bx * 2, by * 2).0 };
         let sub_satd = get_satd(
           &ts.input_tile.planes[p].subregion(sub_area), &rec.subregion(sub_area),
-          BlockSize::BLOCK_8X8, fi.sequence.bit_depth, fi.cpu_feature_level);
+          mode_bsize, fi.sequence.bit_depth, fi.cpu_feature_level);
 
         let (sub_r, sub_d) = estimate_rd(fi, mode, p, sub_satd);
         w.add_bits_frac(sub_r << OD_BITRES);

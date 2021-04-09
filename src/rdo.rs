@@ -1027,6 +1027,8 @@ fn luma_chroma_mode_rdo<T: Pixel>(
         let need_recon_pixel =
           luma_mode_is_intra && tx_size.block_size() != bsize;
 
+        assert!(need_recon_pixel == false);
+
         encode_block_pre_cdef(&fi.sequence, ts, cw, wr, bsize, tile_bo, skip);
         let (has_coeff, tx_dist) = encode_block_post_cdef(
           fi,
@@ -1050,6 +1052,7 @@ fn luma_chroma_mode_rdo<T: Pixel>(
           need_recon_pixel,
           false,
         );
+        assert!(tx_dist.estimated == Estimated, "{:?} {:?} {:?}", tx_dist, rdo_type, tx_size);
 
         let rate = wr.tell_frac() - tell;
         let distortion = if fi.use_tx_domain_distortion && !need_recon_pixel {
