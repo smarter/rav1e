@@ -1091,6 +1091,52 @@ fn get_qidx<T: Pixel>(
   qidx
 }
 
+fn estimate_rd<T: Pixel>(fi: &FrameInvariants<T>, mode: PredictionMode, p: usize, satd: u32) -> (u32, u64) {
+  let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u32 - 2);
+  let q = fi.qps.log_target_q >> 47;
+  let mut q_bin = 0;
+  let is_inter_block = !mode.is_intra();
+  while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize] as i64) > q {
+    q_bin += 1;
+  }
+  let dx: i64 = OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] as i64 - q;
+  let mut dq: i64 = (OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] - OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize]).into();
+  if dq == 0 { dq = 1 };
+  // dbg!(q, q_bin, satd, cost_coeffs >> OD_BITRES, (tx_dist as f64).sqrt());
+
+  let [r00, d00] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][satd_bin as usize];
+  let [r01, d01] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][satd_bin as usize];
+  // dbg!(r00, d00);
+  // dbg!(r01, d01);
+  // dbg!(dx,dq);
+  // let r_est = (r0 as i64 + (((r1-r0) as i64)*dx+(dq >> 1))/dq) as i16;
+  // let d_est = (d0 as i64 + (((d1-d0) as i64)*dx+(dq >> 1))/dq) as i16;
+  let r0 = (r00 as f64 + (((r01-r00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+  let d0 = (d00 as f64 + (((d01-d00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+  // dbg!(r0, d0);
+
+  let [r10, d10] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][(satd_bin+1) as usize];
+  let [r11, d11] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][(satd_bin+1) as usize];
+  // dbg!(r10, d10);
+  // dbg!(r11, d11);
+  let r1 = (r10 as f64 + (((r11-r10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+  let d1 = (d10 as f64 + (((d11-d10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
+  // dbg!(r1, d1);
+
+  let dy: i64 = satd as i64 - ((satd_bin as i64) << (OC_SATD_SHIFT - 3));
+  let ds: i64 = 1 << (OC_SATD_SHIFT - 3);
+
+  let mut r = (r0 + ((r1-r0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)) as i32;
+  let mut d = (d0 + ((d1-d0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)).powf(2.0) as i64;
+  // dbg!(dy,ds);
+  // dbg!(r, d);
+
+  if r < 0 { r = 0; }
+  if d < 0 { d = 0; }
+
+  (r as u32, d as u64)
+}
+
 // For a transform block,
 // predict, transform, quantize, write coefficients to a bitstream,
 // dequantize, inverse-transform.
@@ -1233,57 +1279,30 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
 
   // TODO: is the prediction available at this point for inter ?
   // TODO: only needed when train_rdo is true
-  let satd = get_satd(
-    &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-    tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
+  // let satd = get_satd(
+  //   &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+  //   tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
 
-  if !need_recon_pixel && tx_size.width() == 8 && tx_size.height() == 8 && visible_tx_w == 8 && visible_tx_h == 8 /*&& p == 0*/ {
-    let satd_bin = (satd >> (OC_SATD_SHIFT - 3)).min(OC_COMP_BINS as u32 - 2);
-    let q = fi.qps.log_target_q >> 47;
-    let mut q_bin = 0;
-    let is_inter_block = !mode.is_intra();
-    while q_bin < OC_LOGQ_BINS-1 && (OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize] as i64) > q {
-      q_bin += 1;
+  if !need_recon_pixel && tx_size.width() >= 8 && tx_size.width() <= 16 && tx_size.height() >= 8 && tx_size.height() <= 16 && visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height() /*&& p == 0*/ {
+    let mut d: u64 = 0;
+    let OC_MODE_BLOCK_SIZE = 8;
+    let blocks_h = tx_size.height() as isize / OC_MODE_BLOCK_SIZE;
+    let blocks_w = tx_size.width() as isize / OC_MODE_BLOCK_SIZE;
+    for by in 0..blocks_h {
+      for bx in 0..blocks_w {
+        let sub_area = Area::BlockStartingAt { bo: tx_bo.with_offset(bx * 2, by * 2).0 };
+        let sub_satd = get_satd(
+          &ts.input_tile.planes[p].subregion(sub_area), &rec.subregion(sub_area),
+          BlockSize::BLOCK_8X8, fi.sequence.bit_depth, fi.cpu_feature_level);
+
+        let (sub_r, sub_d) = estimate_rd(fi, mode, p, sub_satd);
+        w.add_bits_frac(sub_r << OD_BITRES);
+        d += sub_d;
+      }
     }
-    let dx: i64 = OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] as i64 - q;
-    let mut dq: i64 = (OC_MODE_LOGQ[q_bin][p][is_inter_block as usize] - OC_MODE_LOGQ[q_bin+1][p][is_inter_block as usize]).into();
-    if dq == 0 { dq = 1 };
-    // dbg!(q, q_bin, satd, cost_coeffs >> OD_BITRES, (tx_dist as f64).sqrt());
-
-    let [r00, d00] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][satd_bin as usize];
-    let [r01, d01] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][satd_bin as usize];
-    // dbg!(r00, d00);
-    // dbg!(r01, d01);
-    // dbg!(dx,dq);
-    // let r_est = (r0 as i64 + (((r1-r0) as i64)*dx+(dq >> 1))/dq) as i16;
-    // let d_est = (d0 as i64 + (((d1-d0) as i64)*dx+(dq >> 1))/dq) as i16;
-    let r0 = (r00 as f64 + (((r01-r00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    let d0 = (d00 as f64 + (((d01-d00) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    // dbg!(r0, d0);
-
-    let [r10, d10] = OC_MODE_RD_SATD[q_bin][p][is_inter_block as usize][(satd_bin+1) as usize];
-    let [r11, d11] = OC_MODE_RD_SATD[q_bin+1][p][is_inter_block as usize][(satd_bin+1) as usize];
-    // dbg!(r10, d10);
-    // dbg!(r11, d11);
-    let r1 = (r10 as f64 + (((r11-r10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    let d1 = (d10 as f64 + (((d11-d10) as f64)*(dx as f64)+(dq as f64 / 2.0))/(dq as f64))/* as i16*/;
-    // dbg!(r1, d1);
-
-    let dy: i64 = satd as i64 - ((satd_bin as i64) << (OC_SATD_SHIFT - 3));
-    let ds: i64 = 1 << (OC_SATD_SHIFT - 3);
-
-    let mut r = (r0 + ((r1-r0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)) as i32;
-    let mut d = (d0 + ((d1-d0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)).powf(2.0) as i64;
-    // dbg!(dy,ds);
-    // dbg!(r, d);
-
-    if r < 0 { r = 0; }
-    if d < 0 { d = 0; }
-
-    w.add_bits_frac((r as u32) << OD_BITRES);
 
     let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
-    let dist = RawDistortion::new(d as u64) * bias * fi.dist_scale[p];
+    let dist = RawDistortion::new(d) * bias * fi.dist_scale[p];
 
     return (true, dist); // no idea what has_coeff is used for really.
   }
