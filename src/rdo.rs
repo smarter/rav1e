@@ -1020,7 +1020,7 @@ pub fn rdo_mode_decision<T: Pixel>(
       true,
     );
     cw.rollback(&cw_checkpoint);
-    if fi.sequence.chroma_sampling != ChromaSampling::Cs400 {
+    if false && fi.sequence.chroma_sampling != ChromaSampling::Cs400 {
       if let Some(cfl) = rdo_cfl_alpha(ts, tile_bo, bsize, best.tx_size, fi) {
         let mut wr = WriterCounter::new();
         let tell = wr.tell_frac();
