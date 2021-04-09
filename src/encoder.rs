@@ -1277,30 +1277,16 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
     *a = 0;
   }
 
-  // TODO: is the prediction available at this point for inter ?
-  // TODO: only needed when train_rdo is true
-  // let satd = get_satd(
-  //   &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-  //   tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
 
   if !need_recon_pixel && tx_size.width() >= 8 && tx_size.width() <= 16 && tx_size.height() >= 8 && tx_size.height() <= 16 && visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height() /*&& p == 0*/ {
+  // TODO: is the prediction available at this point for inter ?
+  // TODO: only needed when train_rdo is true
+    let satd = get_satd(
+      &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+      tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
 
-    let mut d: u64 = 0;
-    let OC_MODE_BLOCK_SIZE = 8;
-    let blocks_h = tx_size.height() as isize / OC_MODE_BLOCK_SIZE;
-    let blocks_w = tx_size.width() as isize / OC_MODE_BLOCK_SIZE;
-    for by in 0..blocks_h {
-      for bx in 0..blocks_w {
-        let sub_area = Area::BlockStartingAt { bo: tx_bo.with_offset(bx * 2, by * 2).0 };
-        let sub_satd = get_satd(
-          &ts.input_tile.planes[p].subregion(sub_area), &rec.subregion(sub_area),
-          BlockSize::BLOCK_8X8, fi.sequence.bit_depth, fi.cpu_feature_level);
-
-        let (sub_r, sub_d) = estimate_rd(fi, mode, p, sub_satd);
-        w.add_bits_frac(sub_r << OD_BITRES);
-        d += sub_d;
-      }
-    }
+    let (r, d) = estimate_rd(fi, mode, p, satd / 4);
+    w.add_bits_frac(r << OD_BITRES);
 
     let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
     let dist = RawDistortion::new(d) * bias * fi.dist_scale[p];
