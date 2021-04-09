@@ -1399,7 +1399,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
       let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
       let dist = RawDistortion::new(raw_tx_dist) * bias * fi.dist_scale[p];
 
-      if has_coeff {
+      if has_coeff && cost_coeffs > 0 {
         assert!(cost_coeffs > 0);
 
         // RDOTRACKER.with(|rdotracker_cell| {
