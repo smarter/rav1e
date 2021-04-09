@@ -1304,7 +1304,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
     let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
     let dist = RawDistortion::new(d) * bias * fi.dist_scale[p];
 
-    return (true, dist); // no idea what has_coeff is used for really.
+    return (true, dist.to_estimated()); // no idea what has_coeff is used for really.
   }
 
 
@@ -2459,12 +2459,12 @@ pub fn encode_block_with_modes<T: Pixel, W: Writer>(
 fn encode_partition_bottomup<T: Pixel, W: Writer>(
   fi: &FrameInvariants<T>, ts: &mut TileStateMut<'_, T>,
   cw: &mut ContextWriter, w_pre_cdef: &mut W, w_post_cdef: &mut W,
-  bsize: BlockSize, tile_bo: TileBlockOffset, ref_rd_cost: f64,
+  bsize: BlockSize, tile_bo: TileBlockOffset, ref_rd_cost: RDCost,
   inter_cfg: &InterConfig,
 ) -> PartitionGroupParameters {
   let rdo_type = RDOType::PixelDistRealRate;
-  let mut rd_cost = std::f64::MAX;
-  let mut best_rd = std::f64::MAX;
+  let mut rd_cost = RDCOST_MAX;
+  let mut best_rd = RDCOST_MAX;
   let mut rdo_output = PartitionGroupParameters {
     rd_cost,
     part_type: PartitionType::PARTITION_INVALID,
@@ -2511,9 +2511,9 @@ fn encode_partition_bottomup<T: Pixel, W: Writer>(
       let w: &mut W = if cw.bc.cdef_coded { w_post_cdef } else { w_pre_cdef };
       let tell = w.tell_frac();
       cw.write_partition(w, tile_bo, PartitionType::PARTITION_NONE, bsize);
-      compute_rd_cost(fi, w.tell_frac() - tell, ScaledDistortion::zero())
+      compute_rd_cost(fi, w.tell_frac() - tell, ScaledDistortion::zeroWildcard())
     } else {
-      0.0
+      RDCost::zero()
     };
 
     let mode_decision =
@@ -2596,7 +2596,7 @@ fn encode_partition_bottomup<T: Pixel, W: Writer>(
       let hbsw = subsize.width_mi(); // Half the block size width in blocks
       let hbsh = subsize.height_mi(); // Half the block size height in blocks
       let mut child_modes = ArrayVec::<PartitionParameters, 4>::new();
-      rd_cost = 0.0;
+      rd_cost = RDCost::zero();
 
       if bsize >= BlockSize::BLOCK_8X8 {
         let w: &mut W =
@@ -2604,7 +2604,7 @@ fn encode_partition_bottomup<T: Pixel, W: Writer>(
         let tell = w.tell_frac();
         cw.write_partition(w, tile_bo, partition, bsize);
         rd_cost =
-          compute_rd_cost(fi, w.tell_frac() - tell, ScaledDistortion::zero());
+          compute_rd_cost(fi, w.tell_frac() - tell, ScaledDistortion::zeroWildcard());
       }
 
       let four_partitions = [
@@ -2644,15 +2644,15 @@ fn encode_partition_bottomup<T: Pixel, W: Writer>(
           inter_cfg,
         );
         let cost = child_rdo_output.rd_cost;
-        assert!(cost >= 0.0);
+        assert!(cost >= RDCost::zero());
 
-        if cost != std::f64::MAX {
+        if cost != RDCOST_MAX {
           rd_cost += cost;
           if !must_split
             && fi.enable_early_exit
             && (rd_cost >= best_rd || rd_cost >= ref_rd_cost)
           {
-            assert!(cost != std::f64::MAX);
+            assert!(cost != RDCOST_MAX);
             early_exit = true;
             break;
           } else if partition != PartitionType::PARTITION_SPLIT {
@@ -2776,7 +2776,7 @@ fn encode_partition_topdown<T: Pixel, W: Writer>(
   let mut rdo_output =
     block_output.clone().unwrap_or(PartitionGroupParameters {
       part_type: PartitionType::PARTITION_INVALID,
-      rd_cost: std::f64::MAX,
+      rd_cost: RDCOST_MAX,
       part_modes: ArrayVec::new(),
     });
   let partition: PartitionType;
@@ -3357,7 +3357,7 @@ fn encode_tile<'a, T: Pixel>(
           &mut sbs_qe.w_post_cdef,
           BlockSize::BLOCK_64X64,
           tile_bo,
-          std::f64::MAX,
+          RDCOST_MAX,
           inter_cfg,
         );
       } else {
