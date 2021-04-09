@@ -1127,14 +1127,16 @@ fn estimate_rd<T: Pixel>(fi: &FrameInvariants<T>, mode: PredictionMode, p: usize
   let ds: i64 = 1 << (OC_SATD_SHIFT - 3);
 
   let mut r = (r0 + ((r1-r0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)) as i32;
-  let mut d = (d0 + ((d1-d0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64)).powf(2.0) as i64;
+  if r < 0 { r = 0; }
+
+  let mut rmse = (d0 + ((d1-d0)*(dy as f64)+(ds as f64 / 2.0))/(ds as f64));
+  if rmse < 0.0 { rmse = 0.0; }
+
+  let d = rmse.powf(2.0) as u64;
   // dbg!(dy,ds);
   // dbg!(r, d);
 
-  if r < 0 { r = 0; }
-  if d < 0 { d = 0; }
-
-  (r as u32, d as u64)
+  (r as u32, d)
 }
 
 // For a transform block,
