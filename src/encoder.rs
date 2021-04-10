@@ -1425,12 +1425,13 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
         let mode_bsize = if p == 0 { BlockSize::BLOCK_8X8 } else { BlockSize::BLOCK_4X4 };
         let weight = (tx_size.width() / mode_bsize.width()) * (tx_size.height() / mode_bsize.height());
         let satdw = satd / (weight as u32);
-
-        RDOTRACKER.with(|rdotracker_cell| {
-          rdotracker_cell.borrow_mut().add_rate(
-            fi.qps, p, !mode.is_intra(), fi.width, fi.height,
-            raw_tx_dist, cost_coeffs as u64, satdw.into());
-        })
+        if weight == 4 {
+          RDOTRACKER.with(|rdotracker_cell| {
+            rdotracker_cell.borrow_mut().add_rate(
+              fi.qps, p, !mode.is_intra(), fi.width, fi.height,
+              raw_tx_dist, cost_coeffs as u64, satdw.into());
+          })
+        }
       }
 
       let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
