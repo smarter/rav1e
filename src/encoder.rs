@@ -1279,12 +1279,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
     *a = 0;
   }
 
-  // TODO: is the prediction available at this point for inter ?
-  // TODO: only needed when train_rdo is true
-  // let satd = get_satd(
-  //   &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
-  //   tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
-
+/*
   if !need_recon_pixel /*&& tx_size.width() <= 16 && tx_size.height() <= 16 && tx_size.width() == tx_size.height() && visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height()*/ /*&& p == 0*/ {
 
     let mut d: u64 = 0;
@@ -1311,7 +1306,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
 
     return (true, dist.to_estimated()); // no idea what has_coeff is used for really.
   }
-
+*/
 
   forward_transform(
     residual,
@@ -1326,7 +1321,7 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
   let eob = ts.qc.quantize(coeffs, qcoeffs, tx_size, tx_type);
 
   let cost_before_coeffs = w.tell_frac();
-  let has_coeff = if need_recon_pixel || rdo_type.needs_coeff_rate() {
+  let has_coeff = if need_recon_pixel || rdo_type.needs_coeff_rate() || true {
     debug_assert!((((fi.w_in_b - frame_bo.0.x) << MI_SIZE_LOG2) >> xdec) >= 4);
     debug_assert!((((fi.h_in_b - frame_bo.0.y) << MI_SIZE_LOG2) >> ydec) >= 4);
     let frame_clipped_txw: usize =
@@ -1420,18 +1415,26 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
         panic!("XX");
       }
 
+      if /*has_coeff*/ visible_tx_w == tx_size.width() && visible_tx_h == tx_size.height() {
+        // TODO: is the prediction available at this point for inter ?
+        let satd = get_satd(
+          &ts.input_tile.planes[p].subregion(area), &rec.subregion(area),
+          tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
+
+
+        let mode_bsize = if p == 0 { BlockSize::BLOCK_8X8 } else { BlockSize::BLOCK_4X4 };
+        let weight = (tx_size.width() / mode_bsize.width()) * (tx_size.height() / mode_bsize.height());
+        let satdw = satd / (weight as u32);
+
+        RDOTRACKER.with(|rdotracker_cell| {
+          rdotracker_cell.borrow_mut().add_rate(
+            fi.qps, p, !mode.is_intra(), fi.width, fi.height,
+            raw_tx_dist, cost_coeffs as u64, satdw.into());
+        })
+      }
+
       let bias = distortion_scale(fi, ts.to_frame_block_offset(tx_bo), bsize);
       let dist = RawDistortion::new(raw_tx_dist) * bias * fi.dist_scale[p];
-
-      if has_coeff {
-        assert!(cost_coeffs > 0);
-
-        // RDOTRACKER.with(|rdotracker_cell| {
-        //   rdotracker_cell.borrow_mut().add_rate(
-        //     fi.qps, p, !mode.is_intra(), fi.width, fi.height,
-        //     raw_tx_dist, cost_coeffs as u64, satd.into());
-        // })
-      }
 
       dist
     } else {
@@ -3164,9 +3167,9 @@ fn encode_tile_group<T: Pixel>(
     }
   }
 
-  // RDOTRACKER.with(|rdotracker_cell| {
-  //   rdotracker_cell.borrow_mut().dump();
-  // });
+  RDOTRACKER.with(|rdotracker_cell| {
+    rdotracker_cell.borrow_mut().dump();
+  });
 
   let (idx_max, max_len) = raw_tiles
     .iter()
