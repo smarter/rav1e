@@ -1422,10 +1422,10 @@ pub fn encode_tx_block<T: Pixel, W: Writer>(
           tx_size.block_size(), fi.sequence.bit_depth, fi.cpu_feature_level);
 
 
-        let mode_bsize = if p == 0 { BlockSize::BLOCK_8X8 } else { BlockSize::BLOCK_4X4 };
+        let mode_bsize = BlockSize::BLOCK_8X8; //if p == 0 { BlockSize::BLOCK_8X8 } else { BlockSize::BLOCK_4X4 };
         let weight = (tx_size.width() / mode_bsize.width()) * (tx_size.height() / mode_bsize.height());
         let satdw = satd / (weight as u32);
-        if weight == 4 {
+        if (p == 0 && tx_size == TxSize::TX_16X16) || (p != 0 && tx_size == TxSize::TX_8X8) {
           RDOTRACKER.with(|rdotracker_cell| {
             rdotracker_cell.borrow_mut().add_rate(
               fi.qps, p, !mode.is_intra(), fi.width, fi.height,
